@@ -84,3 +84,43 @@ android/generated
 
 # React Native Nitro Modules
 nitrogen/
+
+# ---------------------------------------------------------------------------
+# Qualcomm QAIRT SDK -- proprietary, redistributed only under the SDK licence.
+# Both are required to build/run and neither may ever be committed.
+# See docs/05-licensing.md.
+# ---------------------------------------------------------------------------
+android/src/main/jniLibs/
+android/src/main/cpp/include/QNN/
+
+# Model weights and converted context binaries. GPL-3.0 / Non-Commercial /
+# ResearchRAIL -- see docs/04-models.md. Downloaded at runtime, never bundled.
+*.bin
+models/
+
+# Release signing. NOT recoverable -- back the keystore up somewhere safe.
+# Losing it means never being able to update an installed app again.
+*.jks
+*.keystore
+keystore.properties
+
+# ---------------------------------------------------------------------------
+# Working notes -- kept on disk, kept OUT of the repository.
+#
+# CLAUDE.md and docs/ are the engineering record: current state, measured numbers,
+# decisions, open licence questions and session history. They stay complete and
+# current LOCALLY -- they are how the next session picks the work up -- but they
+# are not the public face of the project, and they carry personal details (device,
+# machine paths) and unresolved legal questions that do not belong in a public repo.
+#
+# README.md is the EXCEPTION and is tracked: it is the public face, written for
+# someone finding this package cold. See docs/plan -> Phase 10.
+# ---------------------------------------------------------------------------
+CLAUDE.md
+docs/
+notes/
+
+# Secrets. Nothing here is ever committed (see CLAUDE.md rule 2).
+.env
+.env.*
+!.env.example
