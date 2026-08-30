@@ -1,2 +1,40 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The models are ~317 MB and are not in the APK: several carry licences that are not
+      ours to sublicense, so they are downloaded on first run (docs/04-models.md). Declared
+      by the library rather than left to the app, because a consumer that forgets it gets a
+      SecurityException from deep inside the downloader instead of a clear failure.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application>
+        <!--
+          The Hexagon DSP is reached over fastrpc through libcdsprpc.so, which lives on the
+          VENDOR partition and is listed in /vendor/etc/public.libraries.txt on Qualcomm
+          devices. From targetSdk 31 an app must ALSO name a vendor library here, or the
+          dynamic linker will not put it in the app's namespace, and the QNN stub that
+          needs it fails to load:
+
+              dlopen failed: library "libcdsprpc.so" not found:
+              needed by .../lib/arm64/libQnnHtpV79Stub.so in namespace clns-9
+
+          which surfaces four layers up as "Failed to load skel, error: 4000" and then a
+          failed deviceCreate, an error that says nothing about the actual cause.
+
+          required="false" on BOTH, which is where this differs from an app that only ever
+          ships to Snapdragon. required="true" makes the library absent = the app will not
+          install, and this package is a dependency inside somebody else's app that may
+          well also ship to Pixels and Exynos. Those devices should install, run, and be
+          told "no NPU here" by probeDevice() (ADR-0006), not fail at the Play Store.
+
+          Declared here rather than in the consumer's manifest for the same reason as the
+          permissions above: a consumer who does not know to add it gets a four-layer-deep
+          4000 instead of a working NPU. Manifest merging puts it in their app.
+        -->
+        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+        <uses-native-library android:name="libadsprpc.so" android:required="false" />
+    </application>
+
 </manifest>

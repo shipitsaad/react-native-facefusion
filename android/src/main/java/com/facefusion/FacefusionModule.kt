@@ -4,7 +4,10 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class FacefusionModule(reactContext: ReactApplicationContext) :
   NativeFacefusionSpec(reactContext) {
@@ -12,9 +15,18 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
   // One thread, not a pool. The native pipeline is a single C++ global (`g_pipe`) and is
   // not reentrant, so serialising every native call through one thread is the behaviour
   // we want anyway -- and it keeps the QNN backend's dlopen off the UI thread.
-  private val worker = Executors.newSingleThreadExecutor { r ->
-    Thread(r, "facefusion-native").apply { isDaemon = true }
-  }
+  private val worker = named("facefusion-native")
+
+  // The downloader gets its OWN thread, and this is not an optimisation. A model download
+  // is minutes long; if it shared `worker`, a probeDevice() call made while it ran would
+  // queue behind it and look like a hang. It is safe to separate precisely because
+  // downloading touches no native state at all -- it is HTTP and disk. The one native
+  // answer it needs (the tier chain) is fetched back on `worker`, via [onWorker].
+  private val downloader = named("facefusion-download")
+
+  // A second concurrent download would fight the first over the same `.part` files. The
+  // check is here rather than in ModelDownload so the rejection is immediate and typed.
+  private val downloading = AtomicBoolean(false)
 
   override fun multiply(a: Double, b: Double): Double {
     return a * b
@@ -33,17 +45,90 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun getModelStatus(promise: Promise) {
+    // On `worker`: resolving the tier reads the cached chain, and filling that cache is a
+    // native call the first time.
+    worker.execute {
+      try {
+        promise.resolve(modelStatus())
+      } catch (e: Throwable) {
+        promise.reject("E_MODEL_STATUS", e.message ?: e.toString(), e)
+      }
+    }
+  }
+
+  override fun downloadModels(promise: Promise) {
+    if (!downloading.compareAndSet(false, true)) {
+      promise.reject("E_BUSY", "A model download is already running")
+      return
+    }
+    downloader.execute {
+      try {
+        val chain = onWorker { DeviceProbe.tierChain(reactApplicationContext) }
+        ModelDownload.run(ModelPaths.dir(reactApplicationContext), chain) { progress ->
+          emitOnModelDownloadProgress(toMap(progress))
+        }
+        // Resolve with the status rather than the tier: the caller's next question is
+        // always "can it run now", and answering it here saves a round trip.
+        promise.resolve(onWorker { modelStatus() })
+      } catch (e: DownloadCancelled) {
+        promise.reject("E_CANCELLED", e.message ?: "Cancelled", e)
+      } catch (e: Throwable) {
+        promise.reject("E_DOWNLOAD", e.message ?: e.toString(), e)
+      } finally {
+        downloading.set(false)
+      }
+    }
+  }
+
+  override fun cancelModelDownload() {
+    // Deliberately not a promise. Cancelling is a flag the download loop reads; the answer
+    // the caller wants -- that it stopped -- arrives as the E_CANCELLED rejection of
+    // downloadModels(), not from here.
+    ModelDownload.cancel()
+  }
+
   override fun invalidate() {
+    ModelDownload.cancel()
     worker.shutdown()
+    downloader.shutdown()
     super.invalidate()
+  }
+
+  /** Runs [block] on the native worker and waits. Safe: `worker` never waits on `downloader`. */
+  private fun <T> onWorker(block: () -> T): T = worker.submit(Callable(block)).get()
+
+  private fun modelStatus(): WritableMap {
+    val context = reactApplicationContext
+    val tier = ModelPaths.tier(context)
+    val missing = ModelPaths.missing(context, tier)
+
+    return Arguments.createMap().apply {
+      putString("tier", tier)
+      putArray("tierChain", stringsOf(DeviceProbe.tierChain(context)))
+      putString("dir", ModelPaths.dir(context).absolutePath)
+      putBoolean("ready", missing.isEmpty())
+      putArray("missing", stringsOf(missing))
+      putBoolean("hasEnhancer", ModelPaths.hasEnhancer(context, tier))
+      putBoolean("metered", ModelDownload.isMetered(context))
+    }
+  }
+
+  private fun toMap(progress: DownloadProgress): WritableMap = Arguments.createMap().apply {
+    putString("tier", progress.tier)
+    putInt("fileIndex", progress.fileIndex)
+    putInt("fileCount", progress.fileCount)
+    putString("name", progress.name)
+    // Double, not Int: these run to ~317 million and Arguments has no Long. A double holds
+    // every integer up to 2^53 exactly, so the byte counts are precise.
+    putDouble("doneBytes", progress.doneBytes.toDouble())
+    putDouble("totalBytes", progress.totalBytes.toDouble())
   }
 
   private fun toMap(probe: DeviceProbe): WritableMap = Arguments.createMap().apply {
     putBoolean("ok", probe.ok)
     putString("tier", probe.tier)
-    putArray("tierChain", Arguments.createArray().apply {
-      probe.tierChain.forEach { pushString(it) }
-    })
+    putArray("tierChain", stringsOf(probe.tierChain))
     putInt("arch", probe.arch)
     putInt("vtcmMb", probe.vtcmMb)
     putInt("socModel", probe.socModel)
@@ -52,7 +137,14 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     putString("error", probe.error)
   }
 
+  private fun stringsOf(values: List<String>) = Arguments.createArray().apply {
+    values.forEach { pushString(it) }
+  }
+
   companion object {
     const val NAME = NativeFacefusionSpec.NAME
+
+    private fun named(name: String): ExecutorService =
+      Executors.newSingleThreadExecutor { r -> Thread(r, name).apply { isDaemon = true } }
   }
 }

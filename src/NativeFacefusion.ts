@@ -1,4 +1,8 @@
-import { TurboModuleRegistry, type TurboModule } from 'react-native';
+import {
+  TurboModuleRegistry,
+  type CodegenTypes,
+  type TurboModule,
+} from 'react-native';
 
 /**
  * What the device's Hexagon NPU reports about itself.
@@ -27,9 +31,54 @@ export type DeviceProbeResult = {
   error: string;
 };
 
+/**
+ * What is on disk, and what the pipeline would load right now.
+ *
+ * `tier` is resolved against the **files present**, not against the chip: a phone whose
+ * best architecture has no published models runs the best tier that does. So this can
+ * legitimately differ from `DeviceProbeResult.tier`, and this is the one that matters for
+ * "can it run".
+ */
+export type ModelStatus = {
+  /** The tier that will actually be loaded — best tier whose files are on disk. */
+  tier: string;
+  /** Every tier this chip could load, best first. */
+  tierChain: string[];
+  /** Absolute path of the models directory. */
+  dir: string;
+  /** True when every model the pipeline requires is present and verified. */
+  ready: boolean;
+  /** Base names of the required models still absent, e.g. `['hyperswap', 'nsfw']`. */
+  missing: string[];
+  /** Whether the optional face enhancer (`gpen`) is present. */
+  hasEnhancer: boolean;
+  /** True when the current connection is metered — worth a warning before ~317 MB. */
+  metered: boolean;
+};
+
+/** A download in flight. Byte counts are across the whole set, not the current file. */
+export type ModelDownloadProgress = {
+  /** The tier being fetched. May differ from the chip's best tier — see [ModelStatus]. */
+  tier: string;
+  /** 1-based index of the file being fetched, of `fileCount`. */
+  fileIndex: number;
+  /** How many files this run has to fetch. Already-present files are not counted. */
+  fileCount: number;
+  /** File name being fetched, e.g. `hyperswap_v79.bin`. Empty on the final tick. */
+  name: string;
+  /** Bytes transferred so far across the run, including a resumed `.part`. */
+  doneBytes: number;
+  /** Bytes this run has to transfer in total. */
+  totalBytes: number;
+};
+
 export interface Spec extends TurboModule {
   multiply(a: number, b: number): number;
   probeDevice(): Promise<DeviceProbeResult>;
+  getModelStatus(): Promise<ModelStatus>;
+  downloadModels(): Promise<ModelStatus>;
+  cancelModelDownload(): void;
+  readonly onModelDownloadProgress: CodegenTypes.EventEmitter<ModelDownloadProgress>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Facefusion');

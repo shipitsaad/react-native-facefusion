@@ -28,6 +28,45 @@ data class DeviceProbe(
     private const val FALLBACK_TIER = "v68"
 
     /**
+     * Cached because the chain is a property of the *silicon* and cannot change while the
+     * process lives, and because measuring it brings the QNN backend up — far too expensive
+     * to repeat every time a screen wants to know which models to download.
+     *
+     * Only a real answer is cached. A probe that failed must not be remembered as "this chip
+     * can load nothing" for the rest of the process, and the fallback is not a measurement.
+     *
+     * The chain is cached; the tier [ModelPaths.tier] resolves against disk deliberately is
+     * not. What a device *can* load is fixed; what is *on disk* changes the moment a
+     * download finishes.
+     */
+    @Volatile
+    private var chainCache: List<String>? = null
+
+    /**
+     * Every tier this chip can load, best first — `["v81", "v73", "v68"]`.
+     *
+     * **Not** "this tier and every older one": the native `tierChain()` skips arches the
+     * chip cannot run, so it must never be reconstructed from a single tier.
+     *
+     * Falls back to a one-entry `v68` chain when nothing could be measured, which is a
+     * usable answer rather than an error — see the class docs.
+     */
+    fun tierChain(context: Context): List<String> {
+      chainCache?.let { return it }
+      if (NativePipe.loadError != null) return listOf(FALLBACK_TIER)
+
+      val libDir = context.applicationInfo.nativeLibraryDir
+      val chain = NativePipe.probeTierChain(libDir, libDir)
+        .split(',')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+      if (chain.isEmpty()) return listOf(FALLBACK_TIER)
+      chainCache = chain
+      return chain
+    }
+
+    /**
      * Runs the probe. **Blocking** — it `dlopen`s the QNN backend and creates a device
      * handle, which is tens of milliseconds on real hardware and a failed `dlopen`
      * anywhere else. Call it off the main thread.
@@ -35,17 +74,13 @@ data class DeviceProbe(
     fun probe(context: Context): DeviceProbe {
       NativePipe.loadError?.let { return failed("libffnative.so did not load: $it") }
 
+      val chain = tierChain(context)
+
       // Both directories are the same one. The QAIRT runtime ships as ordinary .so files
       // in jniLibs, so the installer extracts backend, stub and skel side by side into
       // the app's nativeLibraryDir -- and that extraction is exactly what
       // `useLegacyPackaging = true` guarantees, because the backend is opened by path.
       val libDir = context.applicationInfo.nativeLibraryDir
-
-      val chain = NativePipe.probeTierChain(libDir, libDir)
-        .split(',')
-        .filter { it.isNotEmpty() }
-        .ifEmpty { listOf(FALLBACK_TIER) }
-
       val info = parse(NativePipe.probeDeviceInfo(libDir, libDir))
       val ok = info["ok"] == "1"
 

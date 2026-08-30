@@ -1,22 +1,46 @@
-import { useEffect, useState } from 'react';
-import { Text, View, StyleSheet } from 'react-native';
-import { probeDevice, type DeviceProbeResult } from 'react-native-facefusion';
+import { useCallback, useEffect, useState } from 'react';
+import { Button, Text, View, StyleSheet } from 'react-native';
+import {
+  probeDevice,
+  getModelStatus,
+  downloadModels,
+  cancelModelDownload,
+  onModelDownloadProgress,
+  type DeviceProbeResult,
+  type ModelStatus,
+  type ModelDownloadProgress,
+} from 'react-native-facefusion';
 
 export default function App() {
   const [probe, setProbe] = useState<DeviceProbeResult | null>(null);
+  const [models, setModels] = useState<ModelStatus | null>(null);
+  const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    probeDevice()
-      .then(setProbe)
-      .catch((e: Error) => setError(e.message));
+    probeDevice().then(setProbe).catch(fail(setError));
+    getModelStatus().then(setModels).catch(fail(setError));
+  }, []);
+
+  useEffect(() => {
+    const sub = onModelDownloadProgress(setProgress);
+    return () => sub.remove();
+  }, []);
+
+  const download = useCallback(() => {
+    setError(null);
+    setBusy(true);
+    downloadModels()
+      .then(setModels)
+      .catch(fail(setError))
+      .finally(() => setBusy(false));
   }, []);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Device probe</Text>
-      {error != null && <Text style={styles.error}>{error}</Text>}
-      {probe == null && error == null && <Text>probing…</Text>}
+      {probe == null && <Text>probing…</Text>}
       {probe != null && (
         <>
           <Row label="tier" value={probe.tier} />
@@ -30,9 +54,63 @@ export default function App() {
           )}
         </>
       )}
+
+      <Text style={styles.title}>Models</Text>
+      {models == null && <Text>checking…</Text>}
+      {models != null && (
+        <>
+          <Row label="tier" value={models.tier} />
+          <Row label="ready" value={models.ready ? 'yes' : 'no'} />
+          <Row
+            label="missing"
+            value={models.ready ? '—' : models.missing.join(', ')}
+          />
+          <Row label="enhancer" value={models.hasEnhancer ? 'yes' : 'no'} />
+          <Row
+            label="network"
+            value={models.metered ? 'metered' : 'unmetered'}
+          />
+        </>
+      )}
+
+      {progress != null && busy && (
+        <>
+          <Row
+            label="file"
+            value={`${progress.fileIndex}/${progress.fileCount} ${progress.name}`}
+          />
+          <Row
+            label="progress"
+            value={`${mb(progress.doneBytes)} / ${mb(progress.totalBytes)} MB · ${percent(progress)}%`}
+          />
+        </>
+      )}
+
+      {error != null && <Text style={styles.error}>{error}</Text>}
+
+      <View style={styles.actions}>
+        {models != null && !models.ready && !busy && (
+          <Button
+            title={
+              models.metered
+                ? 'Download (~317 MB, metered!)'
+                : 'Download models'
+            }
+            onPress={download}
+          />
+        )}
+        {busy && <Button title="Cancel" onPress={cancelModelDownload} />}
+      </View>
     </View>
   );
 }
+
+const fail = (set: (m: string) => void) => (e: Error) => set(e.message);
+
+const mb = (bytes: number) => (bytes / 1e6).toFixed(1);
+
+const percent = (p: ModelDownloadProgress) =>
+  p.totalBytes > 0 ? Math.floor((p.doneBytes / p.totalBytes) * 100) : 0;
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -53,7 +131,8 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 16,
+    marginTop: 24,
+    marginBottom: 8,
   },
   row: {
     flexDirection: 'row',
@@ -64,7 +143,11 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   value: {
+    flexShrink: 1,
     fontVariant: ['tabular-nums'],
+  },
+  actions: {
+    marginTop: 20,
   },
   error: {
     marginTop: 12,
