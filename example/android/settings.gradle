@@ -1,6 +1,28 @@
-pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
+// pluginManagement {} must be the very first statement in a settings file (Gradle enforces
+// this), so the lookup below is duplicated rather than shared via a top-level variable.
+//
+// Resolved via `node --print require.resolve(...)` rather than a fixed "../node_modules/..."
+// path: this workspace is installed with npm workspaces, which hoists a shared dependency
+// like @react-native/gradle-plugin to the REPO ROOT's node_modules, not into
+// example/node_modules/ -- unlike Yarn's nmHoistingLimits, npm has no per-workspace hoisting
+// boundary to opt out of. require.resolve() walks up parent directories the same way Node's
+// own `require` does, so it finds the package wherever it actually landed, hoisted or not.
+pluginManagement {
+    def reactNativeGradlePlugin = new File(
+        ["node", "--print",
+         "require.resolve('@react-native/gradle-plugin/package.json', {paths:['${rootDir}']})"]
+            .execute(null, rootDir).text.trim()
+    ).parentFile.toString()
+    includeBuild(reactNativeGradlePlugin)
+}
 plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'facefusion.example'
 include ':app'
-includeBuild('../node_modules/@react-native/gradle-plugin')
+
+def reactNativeGradlePlugin = new File(
+    ["node", "--print",
+     "require.resolve('@react-native/gradle-plugin/package.json', {paths:['${rootDir}']})"]
+        .execute(null, rootDir).text.trim()
+).parentFile.toString()
+includeBuild(reactNativeGradlePlugin)
