@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -27,6 +28,7 @@ import {
   type DeviceProbeResult,
   type ModelStatus,
   type ModelDownloadProgress,
+  type SwapOptions,
   type SwapPhotoResult,
   type SwapVideoResult,
   type VideoSwapProgress,
@@ -99,6 +101,46 @@ export default function App() {
   const [videoResult, setVideoResult] = useState<SwapVideoResult | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
 
+  // Advanced swap options — every one of these already exists on the native side
+  // (SwapConfig.kt, ffpipe::Config) and was already accepted by swapPhoto()/swapVideo();
+  // this is the first UI for any of them. Defaults match SwapConfig's own Kotlin defaults.
+  // Shared between the photo and video cards below, since both take the same SwapOptions.
+  const [optionsExpanded, setOptionsExpanded] = useState(false);
+  const [swapperWeight, setSwapperWeight] = useState(0.5);
+  const [maskBlur, setMaskBlur] = useState(0.3);
+  const [maskPadding, setMaskPadding] = useState(0); // one uniform value, all 4 sides
+  const [detectorScore, setDetectorScore] = useState(0.5);
+  const [landmarkerScore, setLandmarkerScore] = useState(0.5);
+  const [pixelBoost, setPixelBoost] = useState(1);
+  const [largestFaceOnly, setLargestFaceOnly] = useState(false);
+  const [faceEnhance, setFaceEnhance] = useState(false);
+  const [faceEnhancerBlend, setFaceEnhancerBlend] = useState(0.8);
+
+  const swapOptions: SwapOptions = useMemo(
+    () => ({
+      swapperWeight,
+      maskBlur,
+      maskPadding: [maskPadding, maskPadding, maskPadding, maskPadding],
+      detectorScore,
+      landmarkerScore,
+      pixelBoost,
+      largestFaceOnly,
+      faceEnhance,
+      faceEnhancerBlend,
+    }),
+    [
+      swapperWeight,
+      maskBlur,
+      maskPadding,
+      detectorScore,
+      landmarkerScore,
+      pixelBoost,
+      largestFaceOnly,
+      faceEnhance,
+      faceEnhancerBlend,
+    ]
+  );
+
   const runProbe = useCallback(() => {
     setProbing(true);
     probeDevice()
@@ -141,22 +183,22 @@ export default function App() {
     setSwapError(null);
     setSwapResult(null);
     setSwapping(true);
-    swapPhoto(sourcePath, targetPath, outputPath)
+    swapPhoto(sourcePath, targetPath, outputPath, swapOptions)
       .then(setSwapResult)
       .catch((e: Error) => setSwapError(e.message))
       .finally(() => setSwapping(false));
-  }, [sourcePath, targetPath, outputPath]);
+  }, [sourcePath, targetPath, outputPath, swapOptions]);
 
   const swapVid = useCallback(() => {
     setVideoError(null);
     setVideoResult(null);
     setVideoProgress(null);
     setVideoSwapping(true);
-    swapVideo(sourcePath, videoTargetPath, videoOutputPath)
+    swapVideo(sourcePath, videoTargetPath, videoOutputPath, swapOptions)
       .then(setVideoResult)
       .catch((e: Error) => setVideoError(e.message))
       .finally(() => setVideoSwapping(false));
-  }, [sourcePath, videoTargetPath, videoOutputPath]);
+  }, [sourcePath, videoTargetPath, videoOutputPath, swapOptions]);
 
   const pickSource = useCallback(() => {
     pickMedia('image').then((path) => path && setSourcePath(path));
@@ -274,6 +316,105 @@ export default function App() {
                 </Text>
               </TouchableOpacity>
             )}
+
+            {/* ============= ADVANCED OPTIONS (shared by photo + video below) ============= */}
+            <View style={styles.card}>
+              <TouchableOpacity
+                style={styles.labelRow}
+                onPress={() => setOptionsExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cardTitle}>Advanced Options</Text>
+                <Text style={styles.pickLink}>
+                  {optionsExpanded ? 'Hide ▲' : 'Show ▼'}
+                </Text>
+              </TouchableOpacity>
+
+              {optionsExpanded && (
+                <View style={styles.optionsBody}>
+                  <NumberStepper
+                    label="Blend (source ↔ target identity)"
+                    value={swapperWeight}
+                    onChange={setSwapperWeight}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Mask blur"
+                    value={maskBlur}
+                    onChange={setMaskBlur}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Mask padding"
+                    value={maskPadding}
+                    onChange={setMaskPadding}
+                    min={0}
+                    max={100}
+                    step={5}
+                    format={(v) => `${v}%`}
+                  />
+                  <NumberStepper
+                    label="Detector confidence"
+                    value={detectorScore}
+                    onChange={setDetectorScore}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Landmarker confidence"
+                    value={landmarkerScore}
+                    onChange={setLandmarkerScore}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Pixel boost"
+                    value={pixelBoost}
+                    onChange={(v) => setPixelBoost(Math.round(v))}
+                    min={1}
+                    max={4}
+                    step={1}
+                    format={(v) => `${v}× (${256 * v}px)`}
+                  />
+                  <ToggleRow
+                    label="Swap largest face only (target)"
+                    value={largestFaceOnly}
+                    onChange={setLargestFaceOnly}
+                  />
+                  <ToggleRow
+                    label={
+                      models?.hasEnhancer
+                        ? 'Face enhancer'
+                        : 'Face enhancer (not downloaded)'
+                    }
+                    value={faceEnhance}
+                    onChange={setFaceEnhance}
+                    disabled={!models?.hasEnhancer}
+                  />
+                  {faceEnhance && (
+                    <NumberStepper
+                      label="Enhancer blend"
+                      value={faceEnhancerBlend}
+                      onChange={setFaceEnhancerBlend}
+                      min={0}
+                      max={1}
+                      step={0.1}
+                    />
+                  )}
+                  <Text style={styles.hint}>
+                    Picking which face to use when the source photo has more
+                    than one isn't supported yet — the largest face in the
+                    source is always used as the identity.
+                  </Text>
+                </View>
+              )}
+            </View>
 
             <View style={styles.card}>
               <Text style={styles.hint}>
@@ -661,6 +802,69 @@ function Separator() {
   return <View style={styles.separator} />;
 }
 
+/** No slider in bare RN core (`@react-native-community/slider` is a separate install this
+ *  project doesn't otherwise need) — a stepper is one fewer dependency for the same knob. */
+function NumberStepper({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  format,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  format?: (value: number) => string;
+}) {
+  const clamp = (v: number) => Math.min(max, Math.max(min, +v.toFixed(2)));
+  return (
+    <View style={styles.stepperRow}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.stepperControls}>
+        <TouchableOpacity
+          style={styles.stepperButton}
+          onPress={() => onChange(clamp(value - step))}
+        >
+          <Text style={styles.stepperButtonText}>−</Text>
+        </TouchableOpacity>
+        <Text style={styles.stepperValue}>
+          {format ? format(value) : value.toFixed(2)}
+        </Text>
+        <TouchableOpacity
+          style={styles.stepperButton}
+          onPress={() => onChange(clamp(value + step))}
+        >
+          <Text style={styles.stepperButtonText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function ToggleRow({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={styles.row}>
+      <Text style={[styles.label, disabled && styles.mutedText]}>{label}</Text>
+      <Switch value={value} onValueChange={onChange} disabled={disabled} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -931,5 +1135,41 @@ const styles = StyleSheet.create({
     color: '#8e8e93',
     marginTop: 5,
     fontVariant: ['tabular-nums'],
+  },
+  optionsBody: {
+    marginTop: 10,
+    gap: 4,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  stepperControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stepperButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: '#2c2c2e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  stepperValue: {
+    fontSize: 13,
+    color: '#ffffff',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+    minWidth: 56,
+    textAlign: 'center',
   },
 });
