@@ -41,6 +41,10 @@ object PhotoSwap {
     /** `[left, top, right, bottom]` from [SourceFaces.detect], or `null` for the default
      *  "largest face in the source" that [NativePipe.setSource] already picks on its own. */
     sourceFaceBox: FloatArray? = null,
+    /** `[left, top, right, bottom]` from [TargetFaces.detect], or `null` to swap every face
+     *  found in the target (subject to [SwapConfig.largestFaceOnly]), same as before this
+     *  option existed. See [FaceCrop]. */
+    targetFaceBox: FloatArray? = null,
   ): PhotoSwapResult {
     NativePipe.loadError?.let {
       throw IllegalStateException("libffnative.so did not load: $it")
@@ -66,7 +70,21 @@ object PhotoSwap {
 
       val targetBgr = NativePipe.argbToBgr(pixelsOf(target), target.width, target.height)
       ContentGate.checkFrame(targetBgr, target.width, target.height)
-      val faceCount = NativePipe.processFrame(targetBgr, target.width, target.height)
+      val faceCount = if (targetFaceBox != null) {
+        // Swap only inside a crop around the chosen face, then paste it back -- the same
+        // "crop, call the unchanged native function, paste/re-encode" trick SourceFaces
+        // uses on the source side. Whatever processFrame finds outside the crop is never
+        // touched, so this needs no native "pick face N" support.
+        val rect = FaceCrop.rect(targetFaceBox, target.width, target.height)
+        val cropped = FaceCrop.crop(targetBgr, target.width, rect)
+        val cw = rect[2] - rect[0]
+        val ch = rect[3] - rect[1]
+        val count = NativePipe.processFrame(cropped, cw, ch)
+        if (count > 0) FaceCrop.paste(targetBgr, target.width, cropped, rect)
+        count
+      } else {
+        NativePipe.processFrame(targetBgr, target.width, target.height)
+      }
       if (faceCount < 0) throw IllegalStateException(NativePipe.lastError())
 
       // One frame, not a loop -- shows the result on any mounted <FacefusionPreview />

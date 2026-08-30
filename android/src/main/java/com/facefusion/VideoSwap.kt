@@ -99,6 +99,18 @@ object VideoSwap {
     /** `[left, top, right, bottom]` from [SourceFaces.detect], or `null` for the default
      *  "largest face in the source" that [NativePipe.setSource] already picks on its own. */
     sourceFaceBox: FloatArray? = null,
+    /** `[left, top, right, bottom]` from [TargetFaces.detect], in the clip's upright
+     *  (post-rotation-correction) coordinate space, or `null` to swap every face found in
+     *  every frame, same as before this option existed. Picked once and held fixed for the
+     *  whole clip — Saad's own call: re-detecting the face every frame to track it as it
+     *  moves would cost a full extra detector pass per frame, on an already-slow NPU
+     *  pipeline, for a demo app where a locked crop is the right tradeoff. See [FaceCrop]. */
+    targetFaceBox: FloatArray? = null,
+    /** Caps how many of the source's frames actually get swapped and encoded — the rest are
+     *  decoded and dropped. `null` or `>=` the source's own frame rate processes every
+     *  frame, unchanged from before this option existed. Trades output smoothness for wall-
+     *  clock swap time: half the frames is roughly half the NPU + encode work. */
+    targetFps: Int? = null,
     onProgress: (VideoSwapProgress) -> Unit,
   ): VideoSwapResult {
     cancelled = false
@@ -123,7 +135,7 @@ object VideoSwap {
         if (!NativePipe.setSource(sourceBgr, source.width, source.height)) {
           throw IllegalStateException(NativePipe.lastError())
         }
-        encode(targetPath, outputPath, tier, onProgress)
+        encode(targetPath, outputPath, tier, targetFaceBox, targetFps, onProgress)
       }
     } catch (e: Cancelled) {
       File(outputPath).delete()
@@ -135,6 +147,8 @@ object VideoSwap {
     targetPath: String,
     outputPath: String,
     tier: String,
+    targetFaceBox: FloatArray?,
+    targetFps: Int?,
     onProgress: (VideoSwapProgress) -> Unit,
   ): VideoSwapResult {
     val probe = MediaExtractor().apply { setDataSource(targetPath) }
@@ -159,13 +173,21 @@ object VideoSwap {
         videoFormat.getInteger(MediaFormat.KEY_FRAME_RATE).coerceAtLeast(1)
       } else 30
     }.getOrDefault(30)
+    // `targetFps` only drops frames, never adds them -- out of range (<=0, or >= the
+    // source's own rate) means "every frame", the behaviour before this option existed.
+    val effectiveFps = targetFps?.takeIf { it in 1 until frameRate } ?: frameRate
     val estimatedFrameCount = if (videoFormat.containsKey(MediaFormat.KEY_DURATION)) {
-      ((videoFormat.getLong(MediaFormat.KEY_DURATION) / 1_000_000.0) * frameRate)
+      ((videoFormat.getLong(MediaFormat.KEY_DURATION) / 1_000_000.0) * effectiveFps)
         .toInt().coerceAtLeast(0)
     } else 0
     val audioTrack = findTrack(probe, "audio/")
     val audioFormat = audioTrack?.let { probe.getTrackFormat(it) }
     probe.release()
+
+    // Fixed for the whole clip -- rotation doesn't change frame to frame, so neither does
+    // the upright size processFrame sees, which is what a target-face crop rect is in.
+    val (uprightW, uprightH) = if (rotation == 90 || rotation == 270) height to width else width to height
+    val targetRect = targetFaceBox?.let { FaceCrop.rect(it, uprightW, uprightH) }
 
     val extractor = MediaExtractor().apply { setDataSource(targetPath) }
     extractor.selectTrack(videoTrack)
@@ -194,6 +216,11 @@ object VideoSwap {
     var inputDone = false
     var frameIndex = 0
     var faceFrameCount = 0
+    // Bresenham-style frame-rate reduction: keeps whichever decoded frames land closest to
+    // an even spread at `effectiveFps`, rather than a fixed "every Nth" stride that would
+    // drift against a variable-frame-rate source.
+    var decodedCount = 0
+    var keptCount = 0
     val info = MediaCodec.BufferInfo()
     val loopStart = System.nanoTime()
     // One sample per second of PRESENTATION time, not per decoded frame -- matches
@@ -238,6 +265,17 @@ object VideoSwap {
             decoder.releaseOutputBuffer(outIndex, false)
             continue
           }
+
+          decodedCount++
+          val keep = effectiveFps >= frameRate || (decodedCount * effectiveFps) / frameRate > keptCount
+          if (!keep) {
+            // Dropped before ever touching an Image or the NPU -- this is the entire saving
+            // targetFps buys: no processFrame call, no encode, just hand the buffer back.
+            decoder.releaseOutputBuffer(outIndex, false)
+            continue
+          }
+          keptCount++
+
           val image = decoder.getOutputImage(outIndex)
             ?: throw IllegalStateException("Decoder did not return a YUV image for $targetPath")
           var bgr = bgrFromImage(image, width, height)
@@ -257,7 +295,18 @@ object VideoSwap {
             bgr = NativePipe.rotateBgr(bgr, width, height, rotation)
               ?: throw IllegalStateException(NativePipe.lastError())
           }
-          val faces = NativePipe.processFrame(bgr, fw, fh)
+          val faces = if (targetRect != null) {
+            // Same crop-swap-paste trick PhotoSwap uses: processFrame only ever sees the
+            // chosen face's region, so it can't touch anything outside it.
+            val cropped = FaceCrop.crop(bgr, fw, targetRect)
+            val cw = targetRect[2] - targetRect[0]
+            val ch = targetRect[3] - targetRect[1]
+            val count = NativePipe.processFrame(cropped, cw, ch)
+            if (count > 0) FaceCrop.paste(bgr, fw, cropped, targetRect)
+            count
+          } else {
+            NativePipe.processFrame(bgr, fw, fh)
+          }
           if (faces < 0) throw IllegalStateException(NativePipe.lastError())
           if (faces > 0) faceFrameCount++
           if (rotation != 0) {

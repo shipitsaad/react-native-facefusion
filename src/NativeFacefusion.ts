@@ -92,6 +92,23 @@ export type SwapOptions = {
    * same as every swap before this option existed.
    */
   sourceFaceBox?: number[];
+  /**
+   * Which face in the target to swap, as `[left, top, right, bottom]` from
+   * {@link detectTargetFaces} — in the target's own pixel coordinates (for a video, the
+   * clip's upright orientation). Omit to swap every face found (subject to
+   * {@link SwapOptions.largestFaceOnly}), same as every swap before this option existed.
+   * For a video, the box is picked once and held fixed for the whole clip — it is not
+   * re-detected frame to frame, so a subject who moves far out of it stops being swapped.
+   */
+  targetFaceBox?: number[];
+  /**
+   * `swapVideo` only. Caps how many of the source's frames actually get swapped and
+   * encoded — the rest are decoded and dropped, not held back or slowed down, so the
+   * output plays at the same real-world duration, just choppier. Omit, or set `>=` the
+   * source's own frame rate, to process every frame (default). Lowering this is a direct
+   * wall-clock speed lever: half the frames is roughly half the NPU + encode work.
+   */
+  targetFps?: number;
 };
 
 /** One face found in a source photo, in the image's own pixel coordinates. */
@@ -209,6 +226,16 @@ export interface Spec extends TurboModule {
    * required models are not on disk yet, and `E_DETECT` otherwise.
    */
   detectSourceFaces(sourcePath: string): Promise<DetectedFace[]>;
+  /**
+   * Every face detected in the target at `targetPath` — a photo, or a video (its first
+   * frame, already upright) — for a UI to let the user pick one before swapping. Pass the
+   * chosen face's box back as {@link SwapOptions.targetFaceBox}. Does not swap or modify
+   * anything.
+   *
+   * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
+   * required models are not on disk yet, and `E_DETECT` otherwise.
+   */
+  detectTargetFaces(targetPath: string): Promise<DetectedFace[]>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Facefusion');

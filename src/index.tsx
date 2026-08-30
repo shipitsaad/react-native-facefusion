@@ -8,6 +8,7 @@ export {
 export { swapPhoto } from './swapPhoto';
 export { swapVideo, cancelVideoSwap, onVideoSwapProgress } from './swapVideo';
 export { detectSourceFaces } from './detectSourceFaces';
+export { detectTargetFaces } from './detectTargetFaces';
 export { FacefusionPreview } from './FacefusionPreview';
 export type { FacefusionPreviewProps } from './FacefusionPreview';
 export type {

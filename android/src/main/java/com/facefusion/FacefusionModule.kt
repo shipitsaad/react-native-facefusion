@@ -104,7 +104,7 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
       try {
         val result = PhotoSwap.run(
           reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options),
-          sourceFaceBox(options),
+          sourceFaceBox(options), targetFaceBox(options),
         )
         promise.resolve(toMap(result))
       } catch (e: PipeGuard.Busy) {
@@ -137,6 +137,21 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun detectTargetFaces(targetPath: String, promise: Promise) {
+    worker.execute {
+      try {
+        val faces = TargetFaces.detect(reactApplicationContext, targetPath, SwapConfig())
+        promise.resolve(facesArray(faces))
+      } catch (e: PipeGuard.Busy) {
+        promise.reject("E_BUSY", e.message, e)
+      } catch (e: TargetFaces.ModelsMissing) {
+        promise.reject("E_MODELS", e.message, e)
+      } catch (e: Throwable) {
+        promise.reject("E_DETECT", e.message ?: e.toString(), e)
+      }
+    }
+  }
+
   override fun swapVideo(
     sourcePath: String,
     targetPath: String,
@@ -153,7 +168,7 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
       try {
         val result = VideoSwap.run(
           reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options),
-          sourceFaceBox(options),
+          sourceFaceBox(options), targetFaceBox(options), targetFps(options),
         ) { progress ->
           VideoSwapService.updateProgress(
             reactApplicationContext, "Swapping video… ${progress.frameIndex} frames"
@@ -259,6 +274,25 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     val arr = options.getArray("sourceFaceBox") ?: return null
     require(arr.size() == 4) { "sourceFaceBox must be [left, top, right, bottom]" }
     return FloatArray(4) { i -> arr.getDouble(i).toFloat() }
+  }
+
+  /** `targetFaceBox` from `options` -- mirrors [sourceFaceBox] above; see [FaceCrop]. */
+  private fun targetFaceBox(options: ReadableMap?): FloatArray? {
+    if (options == null || !options.hasKey("targetFaceBox") || options.isNull("targetFaceBox")) {
+      return null
+    }
+    val arr = options.getArray("targetFaceBox") ?: return null
+    require(arr.size() == 4) { "targetFaceBox must be [left, top, right, bottom]" }
+    return FloatArray(4) { i -> arr.getDouble(i).toFloat() }
+  }
+
+  /** `targetFps` from `options` -- not part of [swapConfig]/[SwapConfig] because it never
+   *  reaches `initEx`; it only decides which decoded frames [VideoSwap] bothers swapping. */
+  private fun targetFps(options: ReadableMap?): Int? {
+    if (options == null || !options.hasKey("targetFps") || options.isNull("targetFps")) {
+      return null
+    }
+    return options.getDouble("targetFps").toInt()
   }
 
   private fun facesArray(faces: List<DetectedFace>) = Arguments.createArray().apply {
