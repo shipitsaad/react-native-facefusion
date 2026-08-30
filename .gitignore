@@ -93,6 +93,16 @@ nitrogen/
 android/src/main/jniLibs/
 android/src/main/cpp/include/QNN/
 
+# ---------------------------------------------------------------------------
+# Upstream's C++ engine -- fetched, never committed.
+#
+# AbrahamPaulJ/facefusion-mobile ships NO LICENSE file, which is all rights reserved:
+# committing their sources here would be redistribution, and git history is forever.
+# The NOTICE and scripts/fetch-upstream.sh ARE tracked, so a clone can place the files
+# itself. Un-ignore this only if upstream grants a licence. See docs/05-licensing.md.
+# ---------------------------------------------------------------------------
+third_party/facefusion-mobile/cpp/
+
 # Model weights and converted context binaries. GPL-3.0 / Non-Commercial /
 # ResearchRAIL -- see docs/04-models.md. Downloaded at runtime, never bundled.
 *.bin

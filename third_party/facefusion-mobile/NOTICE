@@ -1,0 +1,44 @@
+# NOTICE — third-party source: facefusion-mobile
+
+This directory holds the C++ inference engine used by this package. It is **not our
+code**. It is vendored unmodified from another project so that re-syncing stays a file
+copy (ADR-0004).
+
+| | |
+|---|---|
+| Project | `facefusion-mobile` |
+| Author | AbrahamPaulJ |
+| Source | https://github.com/AbrahamPaulJ/facefusion-mobile |
+| Upstream path | `work/android/app/src/main/cpp/` |
+| Pinned commit | `bf633acee030772deb2f2068866c0c0a17de24ba` (2026-08-30) |
+| Vendored on | 2026-08-30 |
+| Modifications | **none** |
+
+## Files
+
+| File | SHA-256 (at the pinned commit) |
+|---|---|
+| `cpp/ffcv.cpp`   | `08d23da6e579b6cfca0de3618b2fc0da1182cb7e6190332e37adeafe2b15838d` |
+| `cpp/ffcv.h`     | `cd43cb596fdef378e173386d54fee13cd690795a9e59f732bc1c5b7d81e88d09` |
+| `cpp/ffjni.cpp`  | `a957f0df308aa4bb1788fcebcb6eb99be7736422edb6beebc62a0f1106cbb9c8` |
+| `cpp/ffpipe.cpp` | `e0c308356abefbd84dc2f647ad1c392aa0f924570de9e66269fd47f804e3005d` |
+| `cpp/ffpipe.h`   | `ce99f9ff2b89e8e0f852dab2803a3b13b139404055f5d9e31959b9a28688f3c0` |
+| `cpp/ffqnn.cpp`  | `d00379a9833881f2735596b16eb01d1999fa2eb86237948290c37647497e04ca` |
+| `cpp/ffqnn.h`    | `762447796eaa2f88d443200ccab9cd6162822d54944571b9a429a658c657b533` |
+
+Upstream's own `CMakeLists.txt` is deliberately **not** copied. Ours lives at
+`android/src/main/cpp/CMakeLists.txt` because the source paths and the QNN include
+roots differ in this repo; the compiler flags and the link line are identical.
+
+## Licence
+
+Upstream publishes **no LICENSE file**. Under copyright law that is *all rights
+reserved*: the code may be read, but not redistributed. Permission has not yet been
+requested.
+
+Because of that, **`cpp/` is gitignored and is not part of this repository.** Nothing
+here redistributes upstream's work. Run `scripts/fetch-upstream.sh` to place the files
+on your own machine, which is a clone you are already entitled to make.
+
+If upstream grants a licence, un-ignore `cpp/`, commit it with the licence text beside
+this file, and delete this paragraph. See `docs/05-licensing.md` §1.

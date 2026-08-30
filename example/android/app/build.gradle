@@ -105,6 +105,19 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+
+    // MANDATORY for this package, and it must be set by the APP -- a library cannot set
+    // it on its consumer's behalf. libffnative.so dlopen()s the Qualcomm QNN backend by
+    // absolute path out of nativeLibraryDir, so those .so files have to exist as real
+    // files on disk. The modern default (false) leaves them compressed inside the APK
+    // and mapped straight from it, where there is no path to open. It fails at runtime,
+    // not at build time. See docs/01-architecture.md.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/*.so"
+        }
+    }
 }
 
 dependencies {

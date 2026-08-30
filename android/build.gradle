@@ -1,8 +1,9 @@
 buildscript {
   ext.Facefusion = [
     kotlinVersion: "2.0.21",
-    minSdkVersion: 24,
-    compileSdkVersion: 36
+    minSdkVersion: 31,
+    compileSdkVersion: 36,
+    ndkVersion: "27.1.12297006"
   ]
 
   ext.getExtOrDefault = { prop ->
@@ -35,9 +36,30 @@ android {
   namespace "com.facefusion"
 
   compileSdkVersion getExtOrDefault("compileSdkVersion")
+  ndkVersion getExtOrDefault("ndkVersion")
 
+  // arm64 only. Every device this package supports is a 64-bit Snapdragon, and the QNN
+  // runtime we dlopen ships no other ABI -- building x86/armeabi would produce a
+  // libffnative.so that can never find a backend.
   defaultConfig {
     minSdkVersion getExtOrDefault("minSdkVersion")
+    ndk {
+      abiFilters "arm64-v8a"
+    }
+    externalNativeBuild {
+      cmake {
+        // c++_shared, not c++_static: several .so files in one process must share one
+        // copy of the STL, and libffnative.so is not the only native library here.
+        arguments "-DANDROID_STL=c++_shared"
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "src/main/cpp/CMakeLists.txt"
+      version "3.22.1"
+    }
   }
 
   compileOptions {
