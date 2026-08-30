@@ -30,6 +30,20 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
   // check is here rather than in ModelDownload so the rejection is immediate and typed.
   private val downloading = AtomicBoolean(false)
 
+  // A THIRD thread, for the same reason `downloader` is separate from `worker`: a video
+  // swap is minutes long, and if it shared `worker` a probeDevice()/getModelStatus() call
+  // made mid-swap would silently queue behind it. It is not safe to fold into `downloader`
+  // either -- unlike a download, a video job DOES touch the native pipeline throughout, via
+  // PipeGuard, which is the actual cross-job mutual exclusion. This executor only keeps
+  // unrelated lightweight calls responsive while it runs.
+  private val videoWorker = named("facefusion-video")
+
+  // Checked synchronously in swapVideo() before dispatch. Without it, a second call would
+  // silently queue behind the first on `videoWorker` (a single-thread executor) and only
+  // get rejected by PipeGuard.Busy once it started running, minutes later -- this fails
+  // fast instead, the same shape as `downloading` above.
+  private val videoBusy = AtomicBoolean(false)
+
   override fun multiply(a: Double, b: Double): Double {
     return a * b
   }
@@ -107,6 +121,50 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun swapVideo(
+    sourcePath: String,
+    targetPath: String,
+    outputPath: String,
+    options: ReadableMap?,
+    promise: Promise,
+  ) {
+    if (!videoBusy.compareAndSet(false, true)) {
+      promise.reject("E_BUSY", "A video swap is already running")
+      return
+    }
+    videoWorker.execute {
+      VideoSwapService.start(reactApplicationContext)
+      try {
+        val result = VideoSwap.run(
+          reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options)
+        ) { progress ->
+          VideoSwapService.updateProgress(
+            reactApplicationContext, "Swapping video… ${progress.frameIndex} frames"
+          )
+          emitOnVideoSwapProgress(toMap(progress))
+        }
+        promise.resolve(toMap(result))
+      } catch (e: PipeGuard.Busy) {
+        promise.reject("E_BUSY", e.message, e)
+      } catch (e: VideoSwap.ModelsMissing) {
+        promise.reject("E_MODELS", e.message, e)
+      } catch (e: VideoSwap.Cancelled) {
+        promise.reject("E_CANCELLED", e.message ?: "Cancelled", e)
+      } catch (e: Throwable) {
+        // Includes UnsatisfiedLinkError -- see the same note on probeDevice() above.
+        promise.reject("E_SWAP", e.message ?: e.toString(), e)
+      } finally {
+        videoBusy.set(false)
+        VideoSwapService.stop(reactApplicationContext)
+      }
+    }
+  }
+
+  override fun cancelVideoSwap() {
+    // Deliberately not a promise -- see cancelModelDownload() below for why.
+    VideoSwap.cancel()
+  }
+
   override fun cancelModelDownload() {
     // Deliberately not a promise. Cancelling is a flag the download loop reads; the answer
     // the caller wants -- that it stopped -- arrives as the E_CANCELLED rejection of
@@ -116,9 +174,11 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
 
   override fun invalidate() {
     ModelDownload.cancel()
+    VideoSwap.cancel()
     NativePipe.release()
     worker.shutdown()
     downloader.shutdown()
+    videoWorker.shutdown()
     super.invalidate()
   }
 
@@ -174,6 +234,21 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     putString("outputPath", result.outputPath)
     putInt("faceCount", result.faceCount)
     putString("tier", result.tier)
+  }
+
+  private fun toMap(result: VideoSwapResult): WritableMap = Arguments.createMap().apply {
+    putString("outputPath", result.outputPath)
+    putInt("frameCount", result.frameCount)
+    putInt("faceFrameCount", result.faceFrameCount)
+    putString("tier", result.tier)
+    putDouble("fps", result.fps)
+    putBoolean("hasAudio", result.hasAudio)
+  }
+
+  private fun toMap(progress: VideoSwapProgress): WritableMap = Arguments.createMap().apply {
+    putInt("frameIndex", progress.frameIndex)
+    putInt("estimatedFrameCount", progress.estimatedFrameCount)
+    putDouble("fps", progress.fps)
   }
 
   private fun toMap(progress: DownloadProgress): WritableMap = Arguments.createMap().apply {

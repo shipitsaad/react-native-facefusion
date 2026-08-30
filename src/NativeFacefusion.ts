@@ -98,6 +98,35 @@ export type SwapPhotoResult = {
   tier: string;
 };
 
+/** The result of one video swap. */
+export type SwapVideoResult = {
+  /** Same as the `outputPath` passed in — returned for convenience. */
+  outputPath: string;
+  /** Frames decoded, swapped and re-encoded — the real count. */
+  frameCount: number;
+  /** Of `frameCount`, how many had at least one face swapped. */
+  faceFrameCount: number;
+  /** The tier that ran — see {@link ModelStatus.tier}. */
+  tier: string;
+  /** Measured wall-clock frames/second across the decode-swap-encode loop. Not upstream's
+   *  per-graph figure — see `docs/MEMORY.md` rule 11. */
+  fps: number;
+  /** Whether the source clip had an audio track — if so, it was copied to `outputPath`
+   *  unmodified. */
+  hasAudio: boolean;
+};
+
+/** A tick of progress through a video swap. */
+export type VideoSwapProgress = {
+  /** Frames decoded, swapped and encoded so far. */
+  frameIndex: number;
+  /** Estimated from the container's duration and frame rate. `0` when it could not be
+   *  estimated — a variable-frame-rate source has no true count until the last frame. */
+  estimatedFrameCount: number;
+  /** Wall-clock frames/second so far. */
+  fps: number;
+};
+
 /** A download in flight. Byte counts are across the whole set, not the current file. */
 export type ModelDownloadProgress = {
   /** The tier being fetched. May differ from the chip's best tier — see [ModelStatus]. */
@@ -134,6 +163,25 @@ export interface Spec extends TurboModule {
     outputPath: string,
     options?: SwapOptions
   ): Promise<SwapPhotoResult>;
+  /**
+   * Swaps the face from `sourcePath` into every frame of the video at `targetPath`,
+   * writing the result to `outputPath`. Runs behind a foreground service (Android requires
+   * one for a job this long) and reports progress via {@link onVideoSwapProgress}.
+   *
+   * Rejects with `E_BUSY` if a swap or another video job is already running, `E_MODELS` if
+   * the required models are not on disk yet, `E_CANCELLED` if {@link cancelVideoSwap} was
+   * called, and `E_SWAP` otherwise.
+   */
+  swapVideo(
+    sourcePath: string,
+    targetPath: string,
+    outputPath: string,
+    options?: SwapOptions
+  ): Promise<SwapVideoResult>;
+  /** Asks the video swap in flight to stop. Fire-and-forget — the answer arrives as the
+   *  `E_CANCELLED` rejection of the {@link swapVideo} promise, not from here. */
+  cancelVideoSwap(): void;
+  readonly onVideoSwapProgress: CodegenTypes.EventEmitter<VideoSwapProgress>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Facefusion');

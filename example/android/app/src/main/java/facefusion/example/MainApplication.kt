@@ -14,8 +14,9 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // Packages that cannot be autolinked yet can be added manually here, for example:
-          // add(MyReactNativePackage())
+          // MediaPickerModule is example-app-only testing scaffolding (see its class doc),
+          // not part of react-native-facefusion, so it is not autolinked -- added by hand.
+          add(MediaPickerPackage())
         },
     )
   }

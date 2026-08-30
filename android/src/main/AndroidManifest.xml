@@ -9,7 +9,33 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+      A video swap runs for seconds to minutes (docs/plan/README.md, Phase 7), long enough
+      that Android kills a plain background process doing it. FOREGROUND_SERVICE is required
+      to start any foreground service at all from API 28; FOREGROUND_SERVICE_MEDIA_PROCESSING
+      is the specific type a foreground service must declare from targetSdk 34, and it is the
+      one that actually names what VideoSwapService is. POST_NOTIFICATIONS is a runtime
+      prompt from API 33: without it granted the service still runs (the OS does not revoke
+      startForeground over a missing notification permission), it just shows no notification.
+      A real consumer app should ask for it; this package's own example app does not yet
+      (Phase 9's picker/permissions UI), so this is a known, documented gap rather than a
+      silent one.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application>
+
+        <!--
+          VideoSwapService is a notification shell, not the worker: see its class doc. It
+          never binds and is only ever started/stopped by FacefusionModule, hence
+          exported="false".
+        -->
+        <service
+            android:name=".VideoSwapService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing" />
         <!--
           The Hexagon DSP is reached over fastrpc through libcdsprpc.so, which lives on the
           VENDOR partition and is listed in /vendor/etc/public.libraries.txt on Qualcomm

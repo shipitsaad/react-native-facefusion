@@ -7,10 +7,13 @@ export {
   onModelDownloadProgress,
 } from './models';
 export { swapPhoto } from './swapPhoto';
+export { swapVideo, cancelVideoSwap, onVideoSwapProgress } from './swapVideo';
 export type {
   DeviceProbeResult,
   ModelStatus,
   ModelDownloadProgress,
   SwapOptions,
   SwapPhotoResult,
+  SwapVideoResult,
+  VideoSwapProgress,
 } from './NativeFacefusion';

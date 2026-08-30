@@ -2,6 +2,20 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      For the "Pick" buttons (MediaPickerModule), so testing a swap does not require
+      adb push-ing files and typing paths by hand. ACTION_OPEN_DOCUMENT itself needs no
+      storage permission: the Storage Access Framework grants read access to whichever
+      one file the user picks regardless, but these are requested from the JS side before
+      the picker opens anyway. READ_EXTERNAL_STORAGE only matters below API 33, where the
+      granular media permissions do not exist yet.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"

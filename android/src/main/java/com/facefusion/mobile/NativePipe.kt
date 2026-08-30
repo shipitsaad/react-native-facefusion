@@ -113,4 +113,48 @@ object NativePipe {
    * `dstW`x`dstH`. Pass the source size for both to get an unscaled conversion.
    */
   external fun bgrToArgb(bgr: ByteArray, w: Int, h: Int, dstW: Int, dstH: Int): IntArray
+
+  /**
+   * `YUV_420_888` planes (a MediaCodec decoder's output image) -> packed BGR bytes.
+   *
+   * `yRow`/`uRow`/`vRow` are each plane's row stride and `uPix`/`vPix` the chroma pixel
+   * stride — MediaCodec hands back arbitrary values for both, and semi-planar (NV12/NV21)
+   * output is a pixel stride of 2, so passing the raw `Image.Plane` values through
+   * unmodified is required; assuming tightly packed I420 renders as green and magenta.
+   */
+  external fun yuvToBgr(
+    y: ByteArray, yRow: Int,
+    u: ByteArray, uRow: Int, uPix: Int,
+    v: ByteArray, vRow: Int, vPix: Int,
+    w: Int, h: Int,
+  ): ByteArray
+
+  /**
+   * Rotates a packed BGR frame by 0/90/180/270 degrees clockwise.
+   *
+   * A portrait clip is stored as LANDSCAPE frames plus a rotation flag in the container —
+   * MediaExtractor exposes it as `MediaFormat.KEY_ROTATION` but MediaCodec does not apply
+   * it, so a decoded frame is on its side and the detector would find nothing. Rotate
+   * upright before [processFrame], then rotate back by `360 - degrees` before encoding so
+   * the output keeps the source's own orientation (the muxer still carries the rotation
+   * hint). 90/270 swap width and height — callers must resize everything downstream.
+   */
+  external fun rotateBgr(bgr: ByteArray, w: Int, h: Int, degrees: Int): ByteArray?
+
+  /**
+   * Packed BGR -> the ENCODER's own input planes, honouring its real row/pixel strides.
+   *
+   * `COLOR_FormatYUV420Flexible` does not mean planar I420 — on-device AVC encoders are
+   * commonly semi-planar (NV12), chroma interleaved with pixel stride 2. Writing planar
+   * I420 into that puts luma right and chroma wrong, which renders as a grey image with
+   * green/pink blobs — closer to right than obviously broken, which is what makes it easy
+   * to miss. `yBuf`/`uBuf`/`vBuf` must be the direct `ByteBuffer`s from the encoder's own
+   * `Image.getPlanes()` (`getInputImage()`), not caller-allocated buffers.
+   */
+  external fun bgrToImagePlanes(
+    bgr: ByteArray, w: Int, h: Int,
+    yBuf: java.nio.ByteBuffer, yRow: Int, yPix: Int,
+    uBuf: java.nio.ByteBuffer, uRow: Int, uPix: Int,
+    vBuf: java.nio.ByteBuffer, vRow: Int, vPix: Int,
+  ): Boolean
 }
