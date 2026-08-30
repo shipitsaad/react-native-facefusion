@@ -450,11 +450,6 @@ export default function App() {
                       step={0.1}
                     />
                   )}
-                  <Text style={styles.hint}>
-                    Picking which face to use when the source photo has more
-                    than one isn't supported yet — the largest face in the
-                    source is always used as the identity.
-                  </Text>
                 </View>
               )}
             </View>

@@ -161,7 +161,6 @@ export type ModelDownloadProgress = {
 };
 
 export interface Spec extends TurboModule {
-  multiply(a: number, b: number): number;
   probeDevice(): Promise<DeviceProbeResult>;
   getModelStatus(): Promise<ModelStatus>;
   downloadModels(): Promise<ModelStatus>;

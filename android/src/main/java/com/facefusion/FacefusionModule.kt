@@ -44,10 +44,6 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
   // fast instead, the same shape as `downloading` above.
   private val videoBusy = AtomicBoolean(false)
 
-  override fun multiply(a: Double, b: Double): Double {
-    return a * b
-  }
-
   override fun probeDevice(promise: Promise) {
     worker.execute {
       try {

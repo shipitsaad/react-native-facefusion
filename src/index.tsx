@@ -1,4 +1,3 @@
-export { multiply } from './multiply';
 export { probeDevice } from './probeDevice';
 export {
   getModelStatus,
