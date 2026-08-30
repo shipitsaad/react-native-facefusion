@@ -264,6 +264,9 @@ object VideoSwap {
             bgr = NativePipe.rotateBgr(bgr, fw, fh, (360 - rotation) % 360)
               ?: throw IllegalStateException(NativePipe.lastError())
           }
+          // Same orientation the encoder is about to receive, so the preview matches the
+          // output file rather than the decoder's raw (possibly sideways) frame.
+          PreviewSurfaceHolder.draw(bgr, width, height)
           feedEncoderFrame(encoder, bgr, width, height, info.presentationTimeUs)
 
           frameIndex++

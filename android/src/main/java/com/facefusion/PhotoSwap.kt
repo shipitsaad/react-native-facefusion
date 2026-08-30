@@ -69,6 +69,10 @@ object PhotoSwap {
       val faceCount = NativePipe.processFrame(targetBgr, target.width, target.height)
       if (faceCount < 0) throw IllegalStateException(NativePipe.lastError())
 
+      // One frame, not a loop -- shows the result on any mounted <FacefusionPreview />
+      // immediately, before the encode-to-file below even starts.
+      PreviewSurfaceHolder.draw(targetBgr, target.width, target.height)
+
       val outArgb = NativePipe.bgrToArgb(targetBgr, target.width, target.height, target.width, target.height)
       val outBitmap = Bitmap.createBitmap(target.width, target.height, Bitmap.Config.ARGB_8888)
       outBitmap.setPixels(outArgb, 0, target.width, 0, 0, target.width, target.height)
