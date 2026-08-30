@@ -119,6 +119,24 @@ object NativePipe {
    */
   external fun analyseFaces(bgr: ByteArray, w: Int, h: Int): FloatArray?
 
+  /**
+   * Upstream's NSFW content gate on one BGR frame (content_analyser.py:detect_with_nsfw_2).
+   * Returns the raw decision statistic `logit[0] - logit[1]` -- the threshold is policy and
+   * lives in [com.facefusion.ContentGate], not here -- or `NaN` if the graph did not run
+   * (check [lastError]). `NaN` must never be treated as "allow": there is no in-band float
+   * that could be mistaken for a real score, which is the point of returning it this way
+   * instead of a boolean.
+   */
+  external fun contentScore(bgr: ByteArray, w: Int, h: Int): Float
+
+  /**
+   * Whether the loaded tier's gate is the quantised build (every tier except v79). The
+   * quantised gate sits ~0.087 mean closer to flagging than the fp32 one, measured 16 of 16
+   * frames in the same direction -- see `docs/02-upstream.md` "The content gate". Reported
+   * alongside a refusal, never compensated for here.
+   */
+  external fun contentGateIsQuantised(): Boolean
+
   /** `Bitmap.getPixels()` output (packed ARGB ints) -> packed BGR bytes for the pipeline. */
   external fun argbToBgr(argb: IntArray, w: Int, h: Int): ByteArray
 

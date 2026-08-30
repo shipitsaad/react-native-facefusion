@@ -111,6 +111,8 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
         promise.reject("E_BUSY", e.message, e)
       } catch (e: PhotoSwap.ModelsMissing) {
         promise.reject("E_MODELS", e.message, e)
+      } catch (e: ContentGate.Refused) {
+        promise.reject("E_CONTENT", e.message, e)
       } catch (e: Throwable) {
         // Includes UnsatisfiedLinkError -- see the same note on probeDevice() above.
         promise.reject("E_SWAP", e.message ?: e.toString(), e)
@@ -165,6 +167,8 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
         promise.reject("E_MODELS", e.message, e)
       } catch (e: VideoSwap.Cancelled) {
         promise.reject("E_CANCELLED", e.message ?: "Cancelled", e)
+      } catch (e: ContentGate.Refused) {
+        promise.reject("E_CONTENT", e.message, e)
       } catch (e: Throwable) {
         // Includes UnsatisfiedLinkError -- see the same note on probeDevice() above.
         promise.reject("E_SWAP", e.message ?: e.toString(), e)

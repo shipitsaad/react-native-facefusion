@@ -65,6 +65,7 @@ object PhotoSwap {
       }
 
       val targetBgr = NativePipe.argbToBgr(pixelsOf(target), target.width, target.height)
+      ContentGate.checkFrame(targetBgr, target.width, target.height)
       val faceCount = NativePipe.processFrame(targetBgr, target.width, target.height)
       if (faceCount < 0) throw IllegalStateException(NativePipe.lastError())
 

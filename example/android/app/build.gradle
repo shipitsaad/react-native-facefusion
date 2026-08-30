@@ -92,6 +92,19 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// ---------------------------------------------------------------------------
+// Content gate presence -> personal, gate-free build (ADR-0003). Checked HERE, in the
+// app, because this is what actually needs a distinct applicationId so a gated and a
+// gate-free build can sit on one phone at once. react-native-facefusion itself compiles
+// either way -- see the stub-generation in its own build.gradle -- this only decides
+// what this particular app is called.
+// ---------------------------------------------------------------------------
+// A hyphen is not a legal Android package-name segment (AAPT rejects it at manifest-merge
+// time, not at Gradle-config time -- caught by actually building this, not by reading the
+// upstream note that inspired it). ".dev" is the standard Android suffix shape instead.
+def hasContentGate = file("$rootDir/../../android/src/main/java/com/facefusion/ContentGate.kt").exists()
+def contentGateVariantTag = hasContentGate ? "" : ".dev"
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -99,7 +112,7 @@ android {
 
     namespace "facefusion.example"
     defaultConfig {
-        applicationId "facefusion.example"
+        applicationId "facefusion.example${contentGateVariantTag}"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

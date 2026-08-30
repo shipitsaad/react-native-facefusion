@@ -171,7 +171,8 @@ export interface Spec extends TurboModule {
    * result to `outputPath`. Paths in, path out — no pixels cross the bridge.
    *
    * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
-   * required models are not on disk yet, and `E_SWAP` otherwise.
+   * required models are not on disk yet, `E_CONTENT` if the target was refused by the
+   * content gate, and `E_SWAP` otherwise.
    */
   swapPhoto(
     sourcePath: string,
@@ -186,7 +187,8 @@ export interface Spec extends TurboModule {
    *
    * Rejects with `E_BUSY` if a swap or another video job is already running, `E_MODELS` if
    * the required models are not on disk yet, `E_CANCELLED` if {@link cancelVideoSwap} was
-   * called, and `E_SWAP` otherwise.
+   * called, `E_CONTENT` if the target was refused by the content gate, and `E_SWAP`
+   * otherwise.
    */
   swapVideo(
     sourcePath: string,

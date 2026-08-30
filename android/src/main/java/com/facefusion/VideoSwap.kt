@@ -196,6 +196,10 @@ object VideoSwap {
     var faceFrameCount = 0
     val info = MediaCodec.BufferInfo()
     val loopStart = System.nanoTime()
+    // One sample per second of PRESENTATION time, not per decoded frame -- matches
+    // upstream's own video sampling rate for the content gate (docs/02-upstream.md).
+    val contentSampler = ContentGate.VideoSampler()
+    var lastSampledSecond = -1
 
     try {
       var encoderDone = false
@@ -239,6 +243,14 @@ object VideoSwap {
           var bgr = bgrFromImage(image, width, height)
           image.close()
           decoder.releaseOutputBuffer(outIndex, false)
+
+          // Content-gate sample, on the raw (pre-rotation-correction) frame -- orientation
+          // does not matter for this check, and it's the same bytes already in hand.
+          val presentedSecond = (info.presentationTimeUs / 1_000_000L).toInt()
+          if (presentedSecond != lastSampledSecond) {
+            lastSampledSecond = presentedSecond
+            contentSampler.sample(bgr, width, height)
+          }
 
           val (fw, fh) = if (rotation == 90 || rotation == 270) height to width else width to height
           if (rotation != 0) {
@@ -295,6 +307,11 @@ object VideoSwap {
       encoder.release()
       extractor.release()
     }
+
+    // Applied here, before the muxer ever opens outputPath -- a refusal must never leave a
+    // partial or full file behind, the same "refuse before doing the work" shape as the
+    // single-frame check in PhotoSwap.
+    contentSampler.finish()
 
     val elapsedS = (System.nanoTime() - loopStart) / 1_000_000_000.0
     val fps = if (elapsedS > 0) frameIndex / elapsedS else 0.0
