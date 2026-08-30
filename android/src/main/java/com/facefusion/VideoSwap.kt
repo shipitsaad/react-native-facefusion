@@ -96,6 +96,9 @@ object VideoSwap {
     targetPath: String,
     outputPath: String,
     cfg: SwapConfig,
+    /** `[left, top, right, bottom]` from [SourceFaces.detect], or `null` for the default
+     *  "largest face in the source" that [NativePipe.setSource] already picks on its own. */
+    sourceFaceBox: FloatArray? = null,
     onProgress: (VideoSwapProgress) -> Unit,
   ): VideoSwapResult {
     cancelled = false
@@ -114,7 +117,8 @@ object VideoSwap {
 
     try {
       return PipeGuard.run(context, tier, cfg) {
-        val source = decodeBitmap(sourcePath)
+        val decodedSource = decodeBitmap(sourcePath)
+        val source = sourceFaceBox?.let { SourceFaces.cropToFace(decodedSource, it) } ?: decodedSource
         val sourceBgr = NativePipe.argbToBgr(pixelsOf(source), source.width, source.height)
         if (!NativePipe.setSource(sourceBgr, source.width, source.height)) {
           throw IllegalStateException(NativePipe.lastError())

@@ -25,6 +25,7 @@ import {
   swapVideo,
   cancelVideoSwap,
   onVideoSwapProgress,
+  detectSourceFaces,
   type DeviceProbeResult,
   type ModelStatus,
   type ModelDownloadProgress,
@@ -32,6 +33,7 @@ import {
   type SwapPhotoResult,
   type SwapVideoResult,
   type VideoSwapProgress,
+  type DetectedFace,
 } from 'react-native-facefusion';
 
 // App-specific external storage (getExternalFilesDir) — avoids scoped storage restrictions
@@ -91,6 +93,17 @@ export default function App() {
   const [swapResult, setSwapResult] = useState<SwapPhotoResult | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
 
+  // Source face picker — which face in sourcePath becomes the identity, when it has more
+  // than one. `null` selection means the default: the largest face, same as every swap
+  // before this existed. Cleared whenever sourcePath changes, since a detected list belongs
+  // to one specific photo and a stale selection would silently apply to the wrong one.
+  const [sourceFaces, setSourceFaces] = useState<DetectedFace[]>([]);
+  const [detectingFaces, setDetectingFaces] = useState(false);
+  const [detectError, setDetectError] = useState<string | null>(null);
+  const [selectedFaceIndex, setSelectedFaceIndex] = useState<number | null>(
+    null
+  );
+
   // Video swap state
   const [videoTargetPath, setVideoTargetPath] = useState(DEFAULT_VIDEO_TARGET);
   const [videoOutputPath, setVideoOutputPath] = useState(DEFAULT_VIDEO_OUTPUT);
@@ -116,6 +129,9 @@ export default function App() {
   const [faceEnhance, setFaceEnhance] = useState(false);
   const [faceEnhancerBlend, setFaceEnhancerBlend] = useState(0.8);
 
+  const selectedFace =
+    selectedFaceIndex != null ? sourceFaces[selectedFaceIndex] : undefined;
+
   const swapOptions: SwapOptions = useMemo(
     () => ({
       swapperWeight,
@@ -127,6 +143,14 @@ export default function App() {
       largestFaceOnly,
       faceEnhance,
       faceEnhancerBlend,
+      sourceFaceBox: selectedFace
+        ? [
+            selectedFace.left,
+            selectedFace.top,
+            selectedFace.right,
+            selectedFace.bottom,
+          ]
+        : undefined,
     }),
     [
       swapperWeight,
@@ -138,8 +162,27 @@ export default function App() {
       largestFaceOnly,
       faceEnhance,
       faceEnhancerBlend,
+      selectedFace,
     ]
   );
+
+  // A detected-faces list belongs to one specific photo — stale results pointing at a
+  // different image would silently swap the wrong face in.
+  useEffect(() => {
+    setSourceFaces([]);
+    setSelectedFaceIndex(null);
+    setDetectError(null);
+  }, [sourcePath]);
+
+  const detectFaces = useCallback(() => {
+    setDetectError(null);
+    setSelectedFaceIndex(null);
+    setDetectingFaces(true);
+    detectSourceFaces(sourcePath)
+      .then(setSourceFaces)
+      .catch((e: Error) => setDetectError(e.message))
+      .finally(() => setDetectingFaces(false));
+  }, [sourcePath]);
 
   const runProbe = useCallback(() => {
     setProbing(true);
@@ -438,6 +481,54 @@ export default function App() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+
+              {/* ===== Source face picker — which face is the identity, when the
+                  source photo has more than one. See ADR-0012. ===== */}
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={detectFaces}
+                disabled={detectingFaces || !isReady}
+              >
+                {detectingFaces ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>
+                    Detect Faces in Source
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {detectError != null && (
+                <Text style={styles.errorText}>{detectError}</Text>
+              )}
+
+              {sourceFaces.length > 0 && (
+                <View style={styles.faceList}>
+                  <TouchableOpacity
+                    style={[
+                      styles.facePill,
+                      selectedFaceIndex === null && styles.facePillSelected,
+                    ]}
+                    onPress={() => setSelectedFaceIndex(null)}
+                  >
+                    <Text style={styles.facePillText}>Largest (default)</Text>
+                  </TouchableOpacity>
+                  {sourceFaces.map((face, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={[
+                        styles.facePill,
+                        selectedFaceIndex === i && styles.facePillSelected,
+                      ]}
+                      onPress={() => setSelectedFaceIndex(i)}
+                    >
+                      <Text style={styles.facePillText}>
+                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
 
               <View style={styles.labelRow}>
                 <Text style={styles.inputLabel}>Target Path</Text>
@@ -1171,5 +1262,26 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     minWidth: 56,
     textAlign: 'center',
+  },
+  faceList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  facePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: '#2c2c2e',
+  },
+  facePillSelected: {
+    backgroundColor: '#0a84ff',
+  },
+  facePillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

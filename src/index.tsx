@@ -8,6 +8,7 @@ export {
 } from './models';
 export { swapPhoto } from './swapPhoto';
 export { swapVideo, cancelVideoSwap, onVideoSwapProgress } from './swapVideo';
+export { detectSourceFaces } from './detectSourceFaces';
 export type {
   DeviceProbeResult,
   ModelStatus,
@@ -16,4 +17,5 @@ export type {
   SwapPhotoResult,
   SwapVideoResult,
   VideoSwapProgress,
+  DetectedFace,
 } from './NativeFacefusion';

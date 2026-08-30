@@ -85,6 +85,23 @@ export type SwapOptions = {
   /** How much of the enhancer to blend in, `0..1`. `0` is the swapper's output untouched.
    *  Default `0.8`. */
   faceEnhancerBlend?: number;
+  /**
+   * Which face in the source photo to use as the identity, as `[left, top, right,
+   * bottom]` from {@link detectSourceFaces} — in the source image's own pixel
+   * coordinates, not normalised. Omit for the default: the largest face in the source,
+   * same as every swap before this option existed.
+   */
+  sourceFaceBox?: number[];
+};
+
+/** One face found in a source photo, in the image's own pixel coordinates. */
+export type DetectedFace = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  /** Detector confidence, `0..1`. */
+  score: number;
 };
 
 /** The result of one still-photo swap. */
@@ -182,6 +199,15 @@ export interface Spec extends TurboModule {
    *  `E_CANCELLED` rejection of the {@link swapVideo} promise, not from here. */
   cancelVideoSwap(): void;
   readonly onVideoSwapProgress: CodegenTypes.EventEmitter<VideoSwapProgress>;
+  /**
+   * Every face detected in the photo at `sourcePath`, for a UI to let the user pick one
+   * before swapping — pass the chosen face's box back as {@link SwapOptions.sourceFaceBox}.
+   * Does not swap or modify anything.
+   *
+   * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
+   * required models are not on disk yet, and `E_DETECT` otherwise.
+   */
+  detectSourceFaces(sourcePath: string): Promise<DetectedFace[]>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Facefusion');

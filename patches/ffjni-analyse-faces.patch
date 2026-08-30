@@ -1,0 +1,45 @@
+--- ffjni.cpp	2026-08-30 21:58:53
++++ ffjni.cpp	2026-08-30 21:59:05
+@@ -236,6 +236,42 @@
+   if (!faces.empty())
+     env->SetByteArrayRegion(jBgr, 0, (jsize)img.data.size(), (const jbyte*)img.data.data());
+   return (jint)faces.size();
++}
++
++// Ours, not upstream's -- see third_party/facefusion-mobile/NOTICE and
++// docs/02-upstream.md "Patches". Applied by scripts/fetch-upstream.sh from
++// patches/ffjni-analyse-faces.patch after every re-sync.
++//
++// Detects every face in an image without swapping: box + confidence only, no
++// embeddings.  Reuses the already-public Pipeline::analyse() and the already-warm
++// g_pipe -- no new pipeline state, no change to any existing function.  Lets a
++// caller with a multi-face source photo see what's in it before deciding which one
++// becomes the identity; the caller commits a choice by cropping to that face's box
++// and calling the existing, unmodified setSource() on the crop, not by any new
++// entry point here.
++JNIEXPORT jfloatArray JNICALL
++Java_com_facefusion_mobile_NativePipe_analyseFaces(JNIEnv* env, jclass, jbyteArray jBgr,
++                                                   jint w, jint h) {
++  if (!g_pipe) { g_err = "pipeline not initialised"; return nullptr; }
++  ffcv::Image img(w, h, 3);
++  if ((size_t)env->GetArrayLength(jBgr) != img.data.size()) {
++    g_err = "analyseFaces: frame is not w*h*3 bytes";
++    return nullptr;
++  }
++  env->GetByteArrayRegion(jBgr, 0, (jsize)img.data.size(), (jbyte*)img.data.data());
++  auto faces = g_pipe->analyse(img);
++  std::vector<float> out;
++  out.reserve(faces.size() * 5);
++  for (auto& f : faces) {
++    out.push_back(f.box[0]);
++    out.push_back(f.box[1]);
++    out.push_back(f.box[2]);
++    out.push_back(f.box[3]);
++    out.push_back(f.detScore);
++  }
++  jfloatArray arr = env->NewFloatArray((jsize)out.size());
++  env->SetFloatArrayRegion(arr, 0, (jsize)out.size(), out.data());
++  return arr;
+ }
+ 
+ /** Bitmap ARGB_8888 ints -> packed BGR bytes. */

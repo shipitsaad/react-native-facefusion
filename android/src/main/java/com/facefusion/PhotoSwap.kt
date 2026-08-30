@@ -38,6 +38,9 @@ object PhotoSwap {
     targetPath: String,
     outputPath: String,
     cfg: SwapConfig,
+    /** `[left, top, right, bottom]` from [SourceFaces.detect], or `null` for the default
+     *  "largest face in the source" that [NativePipe.setSource] already picks on its own. */
+    sourceFaceBox: FloatArray? = null,
   ): PhotoSwapResult {
     NativePipe.loadError?.let {
       throw IllegalStateException("libffnative.so did not load: $it")
@@ -51,7 +54,8 @@ object PhotoSwap {
       )
     }
 
-    val source = decode(sourcePath)
+    val decodedSource = decode(sourcePath)
+    val source = sourceFaceBox?.let { SourceFaces.cropToFace(decodedSource, it) } ?: decodedSource
     val target = decode(targetPath)
 
     return PipeGuard.run(context, tier, cfg) {

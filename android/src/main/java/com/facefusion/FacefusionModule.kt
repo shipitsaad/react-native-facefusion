@@ -107,7 +107,8 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     worker.execute {
       try {
         val result = PhotoSwap.run(
-          reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options)
+          reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options),
+          sourceFaceBox(options),
         )
         promise.resolve(toMap(result))
       } catch (e: PipeGuard.Busy) {
@@ -117,6 +118,23 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
       } catch (e: Throwable) {
         // Includes UnsatisfiedLinkError -- see the same note on probeDevice() above.
         promise.reject("E_SWAP", e.message ?: e.toString(), e)
+      }
+    }
+  }
+
+  override fun detectSourceFaces(sourcePath: String, promise: Promise) {
+    // On `worker`, same as swapPhoto -- a single-image detect pass is fast enough that it
+    // doesn't need its own thread the way the minutes-long video job does.
+    worker.execute {
+      try {
+        val faces = SourceFaces.detect(reactApplicationContext, sourcePath, SwapConfig())
+        promise.resolve(facesArray(faces))
+      } catch (e: PipeGuard.Busy) {
+        promise.reject("E_BUSY", e.message, e)
+      } catch (e: SourceFaces.ModelsMissing) {
+        promise.reject("E_MODELS", e.message, e)
+      } catch (e: Throwable) {
+        promise.reject("E_DETECT", e.message ?: e.toString(), e)
       }
     }
   }
@@ -136,7 +154,8 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
       VideoSwapService.start(reactApplicationContext)
       try {
         val result = VideoSwap.run(
-          reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options)
+          reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options),
+          sourceFaceBox(options),
         ) { progress ->
           VideoSwapService.updateProgress(
             reactApplicationContext, "Swapping video… ${progress.frameIndex} frames"
@@ -229,6 +248,32 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
 
   private fun optDouble(options: ReadableMap, key: String): Double? =
     if (options.hasKey(key) && !options.isNull(key)) options.getDouble(key) else null
+
+  /** `sourceFaceBox` from `options` -- not part of [swapConfig]/[SwapConfig] because it
+   *  never reaches `initEx`; it only decides what [PhotoSwap]/[VideoSwap] crop before
+   *  calling the unchanged `setSource`. See [SourceFaces]. */
+  private fun sourceFaceBox(options: ReadableMap?): FloatArray? {
+    if (options == null || !options.hasKey("sourceFaceBox") || options.isNull("sourceFaceBox")) {
+      return null
+    }
+    val arr = options.getArray("sourceFaceBox") ?: return null
+    require(arr.size() == 4) { "sourceFaceBox must be [left, top, right, bottom]" }
+    return FloatArray(4) { i -> arr.getDouble(i).toFloat() }
+  }
+
+  private fun facesArray(faces: List<DetectedFace>) = Arguments.createArray().apply {
+    faces.forEach { f ->
+      pushMap(
+        Arguments.createMap().apply {
+          putDouble("left", f.left.toDouble())
+          putDouble("top", f.top.toDouble())
+          putDouble("right", f.right.toDouble())
+          putDouble("bottom", f.bottom.toDouble())
+          putDouble("score", f.score.toDouble())
+        }
+      )
+    }
+  }
 
   private fun toMap(result: PhotoSwapResult): WritableMap = Arguments.createMap().apply {
     putString("outputPath", result.outputPath)

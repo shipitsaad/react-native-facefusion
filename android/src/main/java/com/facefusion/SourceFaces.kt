@@ -1,0 +1,96 @@
+package com.facefusion
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import com.facefusion.mobile.NativePipe
+
+/** One face found in a source image, in the image's own pixel coordinates. */
+data class DetectedFace(
+  val left: Float,
+  val top: Float,
+  val right: Float,
+  val bottom: Float,
+  /** Detector confidence, `0..1`. */
+  val score: Float,
+)
+
+/**
+ * Detects every face in a source photo, and crops to one of them for [PhotoSwap]/
+ * [VideoSwap] to use as the identity instead of always "the largest" — see ADR-0012
+ * (`docs/06-decisions/0012-source-face-picker-patches-ffjni.md`).
+ *
+ * [NativePipe.analyseFaces] is the one native symbol in this project that is not
+ * upstream's own — a small, tracked patch (`docs/02-upstream.md` "Patches"), because
+ * reaching the already-warm pipeline for a detect-only pass needed a new export inside
+ * `ffjni.cpp` itself. Everything below this point is our own layer, same as the rest of
+ * the app, and needed no further native changes: choosing a face is done by cropping the
+ * source bitmap and calling the existing, unmodified `setSource`, not by a new native
+ * "pick face N" entry point.
+ */
+object SourceFaces {
+
+  /** Mirrors [PhotoSwap.ModelsMissing] — same required models a swap needs. */
+  class ModelsMissing(message: String) : Exception(message)
+
+  /** How much wider/taller than the detected box to crop, so `setSource`'s own detector
+   *  sees the same kind of context it would in an uncropped photo instead of a box drawn
+   *  exactly to the model's own edges — a hair too tight can lose the chin or forehead. */
+  private const val MARGIN = 0.4f
+
+  fun detect(context: Context, sourcePath: String, cfg: SwapConfig): List<DetectedFace> {
+    NativePipe.loadError?.let {
+      throw IllegalStateException("libffnative.so did not load: $it")
+    }
+
+    val tier = ModelPaths.tier(context)
+    val missing = ModelPaths.missing(context, tier)
+    if (missing.isNotEmpty()) {
+      throw ModelsMissing(
+        "Models missing for $tier: ${missing.joinToString(", ")} — call downloadModels() first"
+      )
+    }
+
+    val bitmap = decode(sourcePath)
+    return PipeGuard.run(context, tier, cfg) {
+      val bgr = NativePipe.argbToBgr(pixelsOf(bitmap), bitmap.width, bitmap.height)
+      val flat = NativePipe.analyseFaces(bgr, bitmap.width, bitmap.height)
+        ?: throw IllegalStateException(NativePipe.lastError())
+      (flat.indices step 5).map { i ->
+        DetectedFace(flat[i], flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4])
+      }
+    }
+  }
+
+  /**
+   * Crops [bitmap] to the box `[left, top, right, bottom]` (as returned by [detect] /
+   * [NativePipe.analyseFaces]), expanded by [MARGIN] on every side and clamped to the
+   * bitmap's own bounds. The result is what gets handed to [NativePipe.setSource] — since
+   * it contains only (or overwhelmingly) the chosen face, `setSource`'s own unmodified
+   * "pick the largest face" logic naturally lands on it.
+   */
+  fun cropToFace(bitmap: Bitmap, box: FloatArray): Bitmap {
+    require(box.size == 4) { "box must be [left, top, right, bottom]" }
+    val (boxLeft, boxTop, boxRight, boxBottom) = box
+    val w = boxRight - boxLeft
+    val h = boxBottom - boxTop
+    val left = (boxLeft - w * MARGIN).toInt().coerceIn(0, bitmap.width - 1)
+    val top = (boxTop - h * MARGIN).toInt().coerceIn(0, bitmap.height - 1)
+    val right = (boxRight + w * MARGIN).toInt().coerceIn(left + 1, bitmap.width)
+    val bottom = (boxBottom + h * MARGIN).toInt().coerceIn(top + 1, bitmap.height)
+    return Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+  }
+
+  // Duplicated from PhotoSwap rather than shared — see that file's note on the same choice.
+  private fun decode(path: String): Bitmap {
+    val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+    return BitmapFactory.decodeFile(path, options)
+      ?: throw IllegalArgumentException("Could not decode image: $path")
+  }
+
+  private fun pixelsOf(bitmap: Bitmap): IntArray {
+    val pixels = IntArray(bitmap.width * bitmap.height)
+    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+    return pixels
+  }
+}

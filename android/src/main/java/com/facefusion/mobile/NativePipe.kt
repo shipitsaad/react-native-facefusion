@@ -105,6 +105,20 @@ object NativePipe {
   /** Swaps every face in `bgr`, in place. Returns the face count found, or -1 on error. */
   external fun processFrame(bgr: ByteArray, w: Int, h: Int): Int
 
+  /**
+   * Detects every face in `bgr` without swapping — box and confidence only, no embeddings.
+   * Flat, 5 floats per face: `[left, top, right, bottom, score] x N`, in `bgr`'s own pixel
+   * coordinates. Returns `null` on error (check [lastError]); an empty array is a real
+   * answer (no face found), not a failure.
+   *
+   * The one function in this file that is not upstream's — see
+   * `third_party/facefusion-mobile/NOTICE` and `docs/02-upstream.md` "Patches". Lets a
+   * multi-face source photo be shown to the user before [setSource] commits to one; the
+   * caller picks a face by cropping to its box and calling [setSource] on the crop, not by
+   * any parameter here.
+   */
+  external fun analyseFaces(bgr: ByteArray, w: Int, h: Int): FloatArray?
+
   /** `Bitmap.getPixels()` output (packed ARGB ints) -> packed BGR bytes for the pipeline. */
   external fun argbToBgr(argb: IntArray, w: Int, h: Int): ByteArray
 

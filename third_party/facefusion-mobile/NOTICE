@@ -1,8 +1,9 @@
 # NOTICE — third-party source: facefusion-mobile
 
 This directory holds the C++ inference engine used by this package. It is **not our
-code**. It is vendored unmodified from another project so that re-syncing stays a file
-copy (ADR-0004).
+code**. It is vendored from another project so that re-syncing stays close to a file
+copy (ADR-0004) — as close as it can stay now that one small patch exists; see
+"Modifications" below and `docs/02-upstream.md` § Patches.
 
 | | |
 |---|---|
@@ -12,11 +13,15 @@ copy (ADR-0004).
 | Upstream path | `work/android/app/src/main/cpp/` |
 | Pinned commit | `bf633acee030772deb2f2068866c0c0a17de24ba` (2026-08-30) |
 | Vendored on | 2026-08-30 |
-| Modifications | **none** |
+| Modifications | **one patch** — `patches/ffjni-analyse-faces.patch`, applied automatically by `scripts/fetch-upstream.sh` after every fetch. Adds a single new JNI export to `ffjni.cpp` (`analyseFaces`); changes no existing function. See `docs/02-upstream.md` § Patches. |
 
 ## Files
 
-| File | SHA-256 (at the pinned commit) |
+The hashes below are of the **pristine, pre-patch** files as fetched — `scripts/
+fetch-upstream.sh` checks these right after cloning, before it applies anything, so
+they verify upstream's actual bytes rather than our patched result.
+
+| File | SHA-256 (at the pinned commit, before patching) |
 |---|---|
 | `cpp/ffcv.cpp`   | `08d23da6e579b6cfca0de3618b2fc0da1182cb7e6190332e37adeafe2b15838d` |
 | `cpp/ffcv.h`     | `cd43cb596fdef378e173386d54fee13cd690795a9e59f732bc1c5b7d81e88d09` |
