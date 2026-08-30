@@ -3,7 +3,9 @@ package com.facefusion
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
+import com.facefusion.mobile.NativePipe
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -81,6 +83,30 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun swapPhoto(
+    sourcePath: String,
+    targetPath: String,
+    outputPath: String,
+    options: ReadableMap?,
+    promise: Promise,
+  ) {
+    worker.execute {
+      try {
+        val result = PhotoSwap.run(
+          reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options)
+        )
+        promise.resolve(toMap(result))
+      } catch (e: PipeGuard.Busy) {
+        promise.reject("E_BUSY", e.message, e)
+      } catch (e: PhotoSwap.ModelsMissing) {
+        promise.reject("E_MODELS", e.message, e)
+      } catch (e: Throwable) {
+        // Includes UnsatisfiedLinkError -- see the same note on probeDevice() above.
+        promise.reject("E_SWAP", e.message ?: e.toString(), e)
+      }
+    }
+  }
+
   override fun cancelModelDownload() {
     // Deliberately not a promise. Cancelling is a flag the download loop reads; the answer
     // the caller wants -- that it stopped -- arrives as the E_CANCELLED rejection of
@@ -90,6 +116,7 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
 
   override fun invalidate() {
     ModelDownload.cancel()
+    NativePipe.release()
     worker.shutdown()
     downloader.shutdown()
     super.invalidate()
@@ -112,6 +139,41 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
       putBoolean("hasEnhancer", ModelPaths.hasEnhancer(context, tier))
       putBoolean("metered", ModelDownload.isMetered(context))
     }
+  }
+
+  /** `options` from JS, defaulted field by field against [SwapConfig]'s own defaults. */
+  private fun swapConfig(options: ReadableMap?): SwapConfig {
+    val defaults = SwapConfig()
+    if (options == null) return defaults
+    return SwapConfig(
+      swapperWeight = optDouble(options, "swapperWeight")?.toFloat() ?: defaults.swapperWeight,
+      maskBlur = optDouble(options, "maskBlur")?.toFloat() ?: defaults.maskBlur,
+      maskPadding = if (options.hasKey("maskPadding") && !options.isNull("maskPadding")) {
+        val arr = options.getArray("maskPadding")
+        (0 until (arr?.size() ?: 0)).map { arr!!.getInt(it) }
+      } else defaults.maskPadding,
+      detectorScore = optDouble(options, "detectorScore")?.toFloat() ?: defaults.detectorScore,
+      landmarkerScore = optDouble(options, "landmarkerScore")?.toFloat() ?: defaults.landmarkerScore,
+      pixelBoost = if (options.hasKey("pixelBoost") && !options.isNull("pixelBoost")) {
+        options.getInt("pixelBoost")
+      } else defaults.pixelBoost,
+      largestFaceOnly = if (options.hasKey("largestFaceOnly") && !options.isNull("largestFaceOnly")) {
+        options.getBoolean("largestFaceOnly")
+      } else defaults.largestFaceOnly,
+      faceEnhance = if (options.hasKey("faceEnhance") && !options.isNull("faceEnhance")) {
+        options.getBoolean("faceEnhance")
+      } else defaults.faceEnhance,
+      faceEnhancerBlend = optDouble(options, "faceEnhancerBlend")?.toFloat() ?: defaults.faceEnhancerBlend,
+    )
+  }
+
+  private fun optDouble(options: ReadableMap, key: String): Double? =
+    if (options.hasKey(key) && !options.isNull(key)) options.getDouble(key) else null
+
+  private fun toMap(result: PhotoSwapResult): WritableMap = Arguments.createMap().apply {
+    putString("outputPath", result.outputPath)
+    putInt("faceCount", result.faceCount)
+    putString("tier", result.tier)
   }
 
   private fun toMap(progress: DownloadProgress): WritableMap = Arguments.createMap().apply {

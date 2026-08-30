@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Text, View, StyleSheet } from 'react-native';
+import { Button, Image, Text, TextInput, View, StyleSheet } from 'react-native';
 import {
   probeDevice,
   getModelStatus,
   downloadModels,
   cancelModelDownload,
   onModelDownloadProgress,
+  swapPhoto,
   type DeviceProbeResult,
   type ModelStatus,
   type ModelDownloadProgress,
+  type SwapPhotoResult,
 } from 'react-native-facefusion';
+
+// No picker UI yet -- that is Phase 9. Push two test photos with a detectable face to
+// these paths (e.g. `adb push face.jpg /sdcard/Download/source.jpg`) and edit here, or
+// just retype the paths in the fields below before pressing Swap.
+const DEFAULT_SOURCE = '/sdcard/Download/source.jpg';
+const DEFAULT_TARGET = '/sdcard/Download/target.jpg';
+const DEFAULT_OUTPUT = '/sdcard/Download/swapped.jpg';
 
 export default function App() {
   const [probe, setProbe] = useState<DeviceProbeResult | null>(null);
@@ -17,6 +26,13 @@ export default function App() {
   const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [sourcePath, setSourcePath] = useState(DEFAULT_SOURCE);
+  const [targetPath, setTargetPath] = useState(DEFAULT_TARGET);
+  const [outputPath, setOutputPath] = useState(DEFAULT_OUTPUT);
+  const [swapping, setSwapping] = useState(false);
+  const [swapResult, setSwapResult] = useState<SwapPhotoResult | null>(null);
+  const [swapError, setSwapError] = useState<string | null>(null);
 
   useEffect(() => {
     probeDevice().then(setProbe).catch(fail(setError));
@@ -36,6 +52,16 @@ export default function App() {
       .catch(fail(setError))
       .finally(() => setBusy(false));
   }, []);
+
+  const swap = useCallback(() => {
+    setSwapError(null);
+    setSwapResult(null);
+    setSwapping(true);
+    swapPhoto(sourcePath, targetPath, outputPath)
+      .then(setSwapResult)
+      .catch(fail(setSwapError))
+      .finally(() => setSwapping(false));
+  }, [sourcePath, targetPath, outputPath]);
 
   return (
     <View style={styles.container}>
@@ -101,6 +127,52 @@ export default function App() {
         )}
         {busy && <Button title="Cancel" onPress={cancelModelDownload} />}
       </View>
+
+      <Text style={styles.title}>Swap a photo</Text>
+      <Text style={styles.hint}>
+        No picker yet (Phase 9) — push two photos to the device and edit the
+        paths below, e.g. `adb push face.jpg /sdcard/Download/source.jpg`.
+      </Text>
+      <TextInput
+        style={styles.input}
+        value={sourcePath}
+        onChangeText={setSourcePath}
+        placeholder="source path"
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={styles.input}
+        value={targetPath}
+        onChangeText={setTargetPath}
+        placeholder="target path"
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={styles.input}
+        value={outputPath}
+        onChangeText={setOutputPath}
+        placeholder="output path"
+        autoCapitalize="none"
+      />
+      <View style={styles.actions}>
+        <Button
+          title={swapping ? 'Swapping…' : 'Swap'}
+          onPress={swap}
+          disabled={swapping || models == null || !models.ready}
+        />
+      </View>
+      {swapError != null && <Text style={styles.error}>{swapError}</Text>}
+      {swapResult != null && (
+        <>
+          <Row label="faces" value={String(swapResult.faceCount)} />
+          <Row label="tier" value={swapResult.tier} />
+          <Row label="output" value={swapResult.outputPath} />
+          <Image
+            style={styles.preview}
+            source={{ uri: `file://${swapResult.outputPath}` }}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -153,5 +225,27 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: '#b00',
     textAlign: 'center',
+  },
+  hint: {
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  input: {
+    width: '100%',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 6,
+    fontSize: 13,
+  },
+  preview: {
+    width: 240,
+    height: 240,
+    marginTop: 12,
+    resizeMode: 'contain',
   },
 });

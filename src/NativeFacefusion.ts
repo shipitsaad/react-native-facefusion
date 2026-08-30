@@ -56,6 +56,48 @@ export type ModelStatus = {
   metered: boolean;
 };
 
+/**
+ * Tunable knobs for a swap. Every field is optional and defaults to upstream's own default
+ * for the `hyperswap` swapper — see `ffpipe::Config` in the vendored C++.
+ */
+export type SwapOptions = {
+  /** Blends the two identity embeddings before the generator sees them. 0.5 = source,
+   *  unmodified; above it strengthens the source identity, below it blends the target's
+   *  identity back in. Default `0.5`. */
+  swapperWeight?: number;
+  /** Softness of the paste-back mask edge, `0..1`. Default `0.3`. */
+  maskBlur?: number;
+  /** `[top, right, bottom, left]`, each `0..100` percent. Default `[0, 0, 0, 0]`. */
+  maskPadding?: number[];
+  /** Minimum detector confidence to count as a face, `0..1`. Default `0.5`. */
+  detectorScore?: number;
+  /** Minimum landmarker confidence, `0..1`. Default `0.5`. */
+  landmarkerScore?: number;
+  /** Per-axis upscale of the swap crop: 1 = 256px, 2 = 512px, 3 = 768px, 4 = 1024px. Costs
+   *  `pixelBoost²` swapper invocations. Default `1`. */
+  pixelBoost?: number;
+  /** Swap only the largest face instead of every face found. Default `false`. */
+  largestFaceOnly?: boolean;
+  /** Run the face enhancer after swapping. Silently has no effect if the enhancer model is
+   *  not on disk — check {@link ModelStatus.hasEnhancer} before offering this. Default
+   *  `false`. */
+  faceEnhance?: boolean;
+  /** How much of the enhancer to blend in, `0..1`. `0` is the swapper's output untouched.
+   *  Default `0.8`. */
+  faceEnhancerBlend?: number;
+};
+
+/** The result of one still-photo swap. */
+export type SwapPhotoResult = {
+  /** Same as the `outputPath` passed in — returned for convenience. */
+  outputPath: string;
+  /** Faces found in the target. `0` means the swap ran but found nothing to swap, and
+   *  `outputPath` is then an untouched copy of the target. */
+  faceCount: number;
+  /** The tier that ran — see {@link ModelStatus.tier}. */
+  tier: string;
+};
+
 /** A download in flight. Byte counts are across the whole set, not the current file. */
 export type ModelDownloadProgress = {
   /** The tier being fetched. May differ from the chip's best tier — see [ModelStatus]. */
@@ -79,6 +121,19 @@ export interface Spec extends TurboModule {
   downloadModels(): Promise<ModelStatus>;
   cancelModelDownload(): void;
   readonly onModelDownloadProgress: CodegenTypes.EventEmitter<ModelDownloadProgress>;
+  /**
+   * Swaps the face from `sourcePath` into every face found in `targetPath`, writing the
+   * result to `outputPath`. Paths in, path out — no pixels cross the bridge.
+   *
+   * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
+   * required models are not on disk yet, and `E_SWAP` otherwise.
+   */
+  swapPhoto(
+    sourcePath: string,
+    targetPath: string,
+    outputPath: string,
+    options?: SwapOptions
+  ): Promise<SwapPhotoResult>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Facefusion');

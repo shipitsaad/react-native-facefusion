@@ -6,8 +6,11 @@ export {
   cancelModelDownload,
   onModelDownloadProgress,
 } from './models';
+export { swapPhoto } from './swapPhoto';
 export type {
   DeviceProbeResult,
   ModelStatus,
   ModelDownloadProgress,
+  SwapOptions,
+  SwapPhotoResult,
 } from './NativeFacefusion';

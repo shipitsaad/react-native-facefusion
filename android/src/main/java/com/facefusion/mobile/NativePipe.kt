@@ -68,4 +68,49 @@ object NativePipe {
    * the chip is old, and the two must never be collapsed into one answer.
    */
   external fun probeDeviceInfo(libDir: String, skelDir: String): String
+
+  /**
+   * Brings up the pipeline: QNN backend, every required context binary, the swap config.
+   *
+   * `modelDir` must hold `<name>_<tier>.bin` for the tier this chip measures internally —
+   * the same resolution [com.facefusion.ModelPaths.tier] does against disk, so the two
+   * are expected to agree (see that file's class doc). `padding` is `[top, right, bottom,
+   * left]`, each `0..100`, or null for no padding.
+   *
+   * Expensive — `dlopen`s the QNN backend and finalises every graph — so callers keep the
+   * pipeline warm across calls rather than calling this per swap. See [PipeGuard].
+   */
+  external fun initEx(
+    libDir: String,
+    skelDir: String,
+    modelDir: String,
+    swapperName: String,
+    weight: Float,
+    maskBlur: Float,
+    padding: IntArray?,
+    detectorScore: Float,
+    landmarkerScore: Float,
+    pixelBoost: Int,
+    largestOnly: Boolean,
+    faceEnhance: Boolean,
+    enhanceBlend: Float,
+  ): Boolean
+
+  /** Tears down the pipeline built by [initEx]. Safe to call when nothing is initialised. */
+  external fun release()
+
+  /** Sets the source identity from one BGR image: the largest face's embedding only. */
+  external fun setSource(bgr: ByteArray, w: Int, h: Int): Boolean
+
+  /** Swaps every face in `bgr`, in place. Returns the face count found, or -1 on error. */
+  external fun processFrame(bgr: ByteArray, w: Int, h: Int): Int
+
+  /** `Bitmap.getPixels()` output (packed ARGB ints) -> packed BGR bytes for the pipeline. */
+  external fun argbToBgr(argb: IntArray, w: Int, h: Int): ByteArray
+
+  /**
+   * Packed BGR bytes -> packed ARGB ints for `Bitmap.setPixels()`, optionally resampling to
+   * `dstW`x`dstH`. Pass the source size for both to get an unscaled conversion.
+   */
+  external fun bgrToArgb(bgr: ByteArray, w: Int, h: Int, dstW: Int, dstH: Int): IntArray
 }
