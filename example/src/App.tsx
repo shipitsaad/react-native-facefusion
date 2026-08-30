@@ -26,6 +26,7 @@ import {
   cancelVideoSwap,
   onVideoSwapProgress,
   detectSourceFaces,
+  FacefusionPreview,
   type DeviceProbeResult,
   type ModelStatus,
   type ModelDownloadProgress,
@@ -569,6 +570,18 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
+            {/* Live Preview -- the swapped frame, drawn natively straight into this view's
+                own Surface (PreviewSurfaceHolder.kt) the moment PhotoSwap has it, no pixels
+                over the bridge. */}
+            {swapping && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Live Preview</Text>
+                <View style={styles.previewContainer}>
+                  <FacefusionPreview style={styles.previewImage} />
+                </View>
+              </View>
+            )}
+
             {swapError != null && (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{swapError}</Text>
@@ -667,6 +680,16 @@ export default function App() {
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
+              )}
+
+              {/* Live Preview -- one frame at a time, straight from VideoSwap.kt's own
+                  decode/swap loop, drawn natively into this view's Surface. Same component
+                  as the photo card above; PreviewSurfaceHolder.kt doesn't know or care which
+                  swap is feeding it. */}
+              {videoSwapping && (
+                <View style={styles.previewContainer}>
+                  <FacefusionPreview style={styles.previewImage} />
+                </View>
               )}
 
               {videoProgress != null && videoSwapping && (
