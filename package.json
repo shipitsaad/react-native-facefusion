@@ -16,11 +16,8 @@
     "src",
     "lib",
     "android",
-    "ios",
     "cpp",
-    "*.podspec",
     "react-native.config.js",
-    "!ios/build",
     "!android/build",
     "!android/gradle",
     "!android/gradlew",
@@ -40,8 +37,11 @@
   },
   "keywords": [
     "react-native",
-    "ios",
-    "android"
+    "android",
+    "face-swap",
+    "npu",
+    "qualcomm",
+    "on-device-ml"
   ],
   "repository": {
     "type": "git",
