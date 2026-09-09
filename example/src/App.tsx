@@ -26,6 +26,7 @@ import {
   cancelVideoSwap,
   onVideoSwapProgress,
   detectSourceFaces,
+  detectTargetFaces,
   FacefusionPreview,
   type DeviceProbeResult,
   type ModelStatus,
@@ -105,6 +106,18 @@ export default function App() {
     null
   );
 
+  // Target face picker (photo) — which face in targetPath actually gets swapped, when it
+  // has more than one. `null` selection means the default: every face found (subject to
+  // `largestFaceOnly` above), same as before this existed. See ADR-0014.
+  const [targetFaces, setTargetFaces] = useState<DetectedFace[]>([]);
+  const [detectingTargetFaces, setDetectingTargetFaces] = useState(false);
+  const [detectTargetError, setDetectTargetError] = useState<string | null>(
+    null
+  );
+  const [selectedTargetFaceIndex, setSelectedTargetFaceIndex] = useState<
+    number | null
+  >(null);
+
   // Video swap state
   const [videoTargetPath, setVideoTargetPath] = useState(DEFAULT_VIDEO_TARGET);
   const [videoOutputPath, setVideoOutputPath] = useState(DEFAULT_VIDEO_OUTPUT);
@@ -114,6 +127,24 @@ export default function App() {
   );
   const [videoResult, setVideoResult] = useState<SwapVideoResult | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+
+  // Target face picker (video) — same idea as the photo one above, detected from the
+  // clip's first frame (already upright — see TargetFaces.kt). A separate selection from
+  // the photo target's, since it's a different path.
+  const [videoTargetFaces, setVideoTargetFaces] = useState<DetectedFace[]>([]);
+  const [detectingVideoTargetFaces, setDetectingVideoTargetFaces] =
+    useState(false);
+  const [detectVideoTargetError, setDetectVideoTargetError] = useState<
+    string | null
+  >(null);
+  const [selectedVideoTargetFaceIndex, setSelectedVideoTargetFaceIndex] =
+    useState<number | null>(null);
+
+  // Video FPS cap — set before running the swap, per Saad's own framing. Off by default
+  // (every frame, unchanged behaviour); when on, only `targetFpsValue` of the source's own
+  // frames actually get swapped and encoded, the rest decoded and dropped. See ADR-0014.
+  const [fpsCapEnabled, setFpsCapEnabled] = useState(false);
+  const [targetFpsValue, setTargetFpsValue] = useState(15);
 
   // Advanced swap options — every one of these already exists on the native side
   // (SwapConfig.kt, ffpipe::Config) and was already accepted by swapPhoto()/swapVideo();
@@ -132,8 +163,21 @@ export default function App() {
 
   const selectedFace =
     selectedFaceIndex != null ? sourceFaces[selectedFaceIndex] : undefined;
+  const selectedTargetFace =
+    selectedTargetFaceIndex != null
+      ? targetFaces[selectedTargetFaceIndex]
+      : undefined;
+  const selectedVideoTargetFace =
+    selectedVideoTargetFaceIndex != null
+      ? videoTargetFaces[selectedVideoTargetFaceIndex]
+      : undefined;
 
-  const swapOptions: SwapOptions = useMemo(
+  const faceBox = (f: DetectedFace | undefined) =>
+    f ? [f.left, f.top, f.right, f.bottom] : undefined;
+
+  // Shared by both photo and video — the identity (source) side is one picker either way.
+  // targetFaceBox differs per target, so it's added below rather than here.
+  const commonOptions = useMemo(
     () => ({
       swapperWeight,
       maskBlur,
@@ -144,14 +188,7 @@ export default function App() {
       largestFaceOnly,
       faceEnhance,
       faceEnhancerBlend,
-      sourceFaceBox: selectedFace
-        ? [
-            selectedFace.left,
-            selectedFace.top,
-            selectedFace.right,
-            selectedFace.bottom,
-          ]
-        : undefined,
+      sourceFaceBox: faceBox(selectedFace),
     }),
     [
       swapperWeight,
@@ -165,6 +202,20 @@ export default function App() {
       faceEnhancerBlend,
       selectedFace,
     ]
+  );
+
+  const photoSwapOptions: SwapOptions = useMemo(
+    () => ({ ...commonOptions, targetFaceBox: faceBox(selectedTargetFace) }),
+    [commonOptions, selectedTargetFace]
+  );
+
+  const videoSwapOptions: SwapOptions = useMemo(
+    () => ({
+      ...commonOptions,
+      targetFaceBox: faceBox(selectedVideoTargetFace),
+      targetFps: fpsCapEnabled ? targetFpsValue : undefined,
+    }),
+    [commonOptions, selectedVideoTargetFace, fpsCapEnabled, targetFpsValue]
   );
 
   // A detected-faces list belongs to one specific photo — stale results pointing at a
@@ -184,6 +235,40 @@ export default function App() {
       .catch((e: Error) => setDetectError(e.message))
       .finally(() => setDetectingFaces(false));
   }, [sourcePath]);
+
+  // A detected-faces list belongs to one specific target -- stale results pointing at a
+  // different photo would silently swap the wrong face.
+  useEffect(() => {
+    setTargetFaces([]);
+    setSelectedTargetFaceIndex(null);
+    setDetectTargetError(null);
+  }, [targetPath]);
+
+  const detectTargetFacesForPhoto = useCallback(() => {
+    setDetectTargetError(null);
+    setSelectedTargetFaceIndex(null);
+    setDetectingTargetFaces(true);
+    detectTargetFaces(targetPath)
+      .then(setTargetFaces)
+      .catch((e: Error) => setDetectTargetError(e.message))
+      .finally(() => setDetectingTargetFaces(false));
+  }, [targetPath]);
+
+  useEffect(() => {
+    setVideoTargetFaces([]);
+    setSelectedVideoTargetFaceIndex(null);
+    setDetectVideoTargetError(null);
+  }, [videoTargetPath]);
+
+  const detectTargetFacesForVideo = useCallback(() => {
+    setDetectVideoTargetError(null);
+    setSelectedVideoTargetFaceIndex(null);
+    setDetectingVideoTargetFaces(true);
+    detectTargetFaces(videoTargetPath)
+      .then(setVideoTargetFaces)
+      .catch((e: Error) => setDetectVideoTargetError(e.message))
+      .finally(() => setDetectingVideoTargetFaces(false));
+  }, [videoTargetPath]);
 
   const runProbe = useCallback(() => {
     setProbing(true);
@@ -227,22 +312,22 @@ export default function App() {
     setSwapError(null);
     setSwapResult(null);
     setSwapping(true);
-    swapPhoto(sourcePath, targetPath, outputPath, swapOptions)
+    swapPhoto(sourcePath, targetPath, outputPath, photoSwapOptions)
       .then(setSwapResult)
       .catch((e: Error) => setSwapError(e.message))
       .finally(() => setSwapping(false));
-  }, [sourcePath, targetPath, outputPath, swapOptions]);
+  }, [sourcePath, targetPath, outputPath, photoSwapOptions]);
 
   const swapVid = useCallback(() => {
     setVideoError(null);
     setVideoResult(null);
     setVideoProgress(null);
     setVideoSwapping(true);
-    swapVideo(sourcePath, videoTargetPath, videoOutputPath, swapOptions)
+    swapVideo(sourcePath, videoTargetPath, videoOutputPath, videoSwapOptions)
       .then(setVideoResult)
       .catch((e: Error) => setVideoError(e.message))
       .finally(() => setVideoSwapping(false));
-  }, [sourcePath, videoTargetPath, videoOutputPath, swapOptions]);
+  }, [sourcePath, videoTargetPath, videoOutputPath, videoSwapOptions]);
 
   const pickSource = useCallback(() => {
     pickMedia('image').then((path) => path && setSourcePath(path));
@@ -542,6 +627,58 @@ export default function App() {
                 autoCorrect={false}
               />
 
+              {/* ===== Target face picker — which face in targetPath actually gets
+                  swapped, when it has more than one. See ADR-0014. ===== */}
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={detectTargetFacesForPhoto}
+                disabled={detectingTargetFaces || !isReady}
+              >
+                {detectingTargetFaces ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>
+                    Detect Faces in Target
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {detectTargetError != null && (
+                <Text style={styles.errorText}>{detectTargetError}</Text>
+              )}
+
+              {targetFaces.length > 0 && (
+                <View style={styles.faceList}>
+                  <TouchableOpacity
+                    style={[
+                      styles.facePill,
+                      selectedTargetFaceIndex === null &&
+                        styles.facePillSelected,
+                    ]}
+                    onPress={() => setSelectedTargetFaceIndex(null)}
+                  >
+                    <Text style={styles.facePillText}>
+                      Every face (default)
+                    </Text>
+                  </TouchableOpacity>
+                  {targetFaces.map((face, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={[
+                        styles.facePill,
+                        selectedTargetFaceIndex === i &&
+                          styles.facePillSelected,
+                      ]}
+                      onPress={() => setSelectedTargetFaceIndex(i)}
+                    >
+                      <Text style={styles.facePillText}>
+                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
               <Text style={styles.inputLabel}>Output Path</Text>
               <TextInput
                 style={styles.input}
@@ -646,6 +783,67 @@ export default function App() {
                 autoCorrect={false}
               />
 
+              {/* ===== Target face picker (video) — same idea as the photo one above,
+                  detected from the clip's first frame. See ADR-0014. ===== */}
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={detectTargetFacesForVideo}
+                disabled={detectingVideoTargetFaces || !isReady}
+              >
+                {detectingVideoTargetFaces ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>
+                    Detect Faces in Target
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {detectVideoTargetError != null && (
+                <Text style={styles.errorText}>{detectVideoTargetError}</Text>
+              )}
+
+              {videoTargetFaces.length > 0 && (
+                <View style={styles.faceList}>
+                  <TouchableOpacity
+                    style={[
+                      styles.facePill,
+                      selectedVideoTargetFaceIndex === null &&
+                        styles.facePillSelected,
+                    ]}
+                    onPress={() => setSelectedVideoTargetFaceIndex(null)}
+                  >
+                    <Text style={styles.facePillText}>
+                      Every face (default)
+                    </Text>
+                  </TouchableOpacity>
+                  {videoTargetFaces.map((face, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={[
+                        styles.facePill,
+                        selectedVideoTargetFaceIndex === i &&
+                          styles.facePillSelected,
+                      ]}
+                      onPress={() => setSelectedVideoTargetFaceIndex(i)}
+                    >
+                      <Text style={styles.facePillText}>
+                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {/* A locked box, not tracked frame to frame -- if the subject moves far out
+                  of it, that face silently stops being swapped. See ADR-0014. */}
+              {selectedVideoTargetFaceIndex !== null && (
+                <Text style={styles.hint}>
+                  Locked to this face's position in the first frame — not
+                  re-detected per frame, so a subject who moves far out of it
+                  stops being swapped.
+                </Text>
+              )}
+
               <Text style={styles.inputLabel}>Output Path</Text>
               <TextInput
                 style={styles.input}
@@ -656,6 +854,24 @@ export default function App() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+
+              {/* ===== FPS cap — set before running the swap. Drops frames before they
+                  ever reach the NPU or encoder, not after. See ADR-0014. ===== */}
+              <ToggleRow
+                label="Limit video FPS (faster swap, choppier output)"
+                value={fpsCapEnabled}
+                onChange={setFpsCapEnabled}
+              />
+              {fpsCapEnabled && (
+                <NumberStepper
+                  label="Target FPS"
+                  value={targetFpsValue}
+                  onChange={(v) => setTargetFpsValue(Math.round(v))}
+                  min={1}
+                  max={30}
+                  step={1}
+                />
+              )}
 
               <TouchableOpacity
                 style={[
