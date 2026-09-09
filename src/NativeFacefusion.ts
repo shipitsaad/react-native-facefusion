@@ -236,6 +236,25 @@ export interface Spec extends TurboModule {
    * required models are not on disk yet, and `E_DETECT` otherwise.
    */
   detectTargetFaces(targetPath: string): Promise<DetectedFace[]>;
+  /**
+   * Copies the file at `path` — a `swapPhoto`/`swapVideo` output, typically — into the
+   * system's Photos/Gallery app, under a `Facefusion` album. Returns the resulting
+   * `content://` URI as a string.
+   *
+   * `path` and the app that owns it stay exactly as they were; this is a copy, not a move.
+   * `mimeType` must be `image/*` or `video/*` — pass the real one for the file (`image/jpeg`
+   * for `swapPhoto`'s default output, `video/mp4` for `swapVideo`'s), since there is no safe
+   * way to guess it from an arbitrary path. `displayName` defaults to `path`'s own filename.
+   *
+   * No storage permission is needed for this on Android — inserting new media an app itself
+   * created has never required one under scoped storage (API 29+). Rejects with `E_MIME` for
+   * an unsupported `mimeType` and `E_SAVE` for anything else, naming what failed.
+   */
+  saveToGallery(
+    path: string,
+    mimeType: string,
+    displayName?: string
+  ): Promise<string>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Facefusion');

@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import com.facefusion.mobile.NativePipe
+import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -43,6 +44,11 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
   // get rejected by PipeGuard.Busy once it started running, minutes later -- this fails
   // fast instead, the same shape as `downloading` above.
   private val videoBusy = AtomicBoolean(false)
+
+  // Its own thread for the same reason `downloader` is separate from `worker`: a gallery
+  // save touches no native state at all, just MediaStore + a file copy, so it must not queue
+  // behind a slow swap or a model download that happen to be running on their own threads.
+  private val gallery = named("facefusion-gallery")
 
   override fun probeDevice(promise: Promise) {
     worker.execute {
@@ -194,6 +200,25 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun saveToGallery(
+    path: String,
+    mimeType: String,
+    displayName: String?,
+    promise: Promise,
+  ) {
+    gallery.execute {
+      try {
+        val name = displayName ?: File(path).name
+        val uri = GallerySave.run(reactApplicationContext, path, mimeType, name)
+        promise.resolve(uri)
+      } catch (e: GallerySave.UnsupportedMimeType) {
+        promise.reject("E_MIME", e.message, e)
+      } catch (e: Throwable) {
+        promise.reject("E_SAVE", e.message ?: e.toString(), e)
+      }
+    }
+  }
+
   override fun cancelVideoSwap() {
     // Deliberately not a promise -- see cancelModelDownload() below for why.
     VideoSwap.cancel()
@@ -213,6 +238,7 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     worker.shutdown()
     downloader.shutdown()
     videoWorker.shutdown()
+    gallery.shutdown()
     super.invalidate()
   }
 

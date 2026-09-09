@@ -27,6 +27,7 @@ import {
   onVideoSwapProgress,
   detectSourceFaces,
   detectTargetFaces,
+  saveToGallery,
   FacefusionPreview,
   type DeviceProbeResult,
   type ModelStatus,
@@ -95,6 +96,14 @@ export default function App() {
   const [swapResult, setSwapResult] = useState<SwapPhotoResult | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
 
+  // "Save to Gallery" for the photo result -- copies swapResult.outputPath (the app's own
+  // private storage) into MediaStore, since that's the only door into shared storage other
+  // apps and the user's own Photos app can see. Cleared whenever a new swap starts, since a
+  // saved-URI toast belongs to the swap that produced it, not the next one.
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [savedPhotoUri, setSavedPhotoUri] = useState<string | null>(null);
+  const [savePhotoError, setSavePhotoError] = useState<string | null>(null);
+
   // Source face picker — which face in sourcePath becomes the identity, when it has more
   // than one. `null` selection means the default: the largest face, same as every swap
   // before this existed. Cleared whenever sourcePath changes, since a detected list belongs
@@ -127,6 +136,11 @@ export default function App() {
   );
   const [videoResult, setVideoResult] = useState<SwapVideoResult | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+
+  // "Save to Gallery" for the video result -- same idea as the photo one above.
+  const [savingVideo, setSavingVideo] = useState(false);
+  const [savedVideoUri, setSavedVideoUri] = useState<string | null>(null);
+  const [saveVideoError, setSaveVideoError] = useState<string | null>(null);
 
   // Target face picker (video) — same idea as the photo one above, detected from the
   // clip's first frame (already upright — see TargetFaces.kt). A separate selection from
@@ -311,6 +325,8 @@ export default function App() {
   const swap = useCallback(() => {
     setSwapError(null);
     setSwapResult(null);
+    setSavedPhotoUri(null);
+    setSavePhotoError(null);
     setSwapping(true);
     swapPhoto(sourcePath, targetPath, outputPath, photoSwapOptions)
       .then(setSwapResult)
@@ -322,12 +338,40 @@ export default function App() {
     setVideoError(null);
     setVideoResult(null);
     setVideoProgress(null);
+    setSavedVideoUri(null);
+    setSaveVideoError(null);
     setVideoSwapping(true);
     swapVideo(sourcePath, videoTargetPath, videoOutputPath, videoSwapOptions)
       .then(setVideoResult)
       .catch((e: Error) => setVideoError(e.message))
       .finally(() => setVideoSwapping(false));
   }, [sourcePath, videoTargetPath, videoOutputPath, videoSwapOptions]);
+
+  // outputPath's own extension decides the mime type here, same as PhotoSwap.write()'s own
+  // PNG/JPEG choice -- this is example-app glue, not the library, so it's fine to be this
+  // simple rather than accept a mimeType from the UI.
+  const saveSwapToGallery = useCallback(() => {
+    if (swapResult == null) return;
+    setSavePhotoError(null);
+    setSavingPhoto(true);
+    const mimeType = swapResult.outputPath.toLowerCase().endsWith('.png')
+      ? 'image/png'
+      : 'image/jpeg';
+    saveToGallery(swapResult.outputPath, mimeType)
+      .then(setSavedPhotoUri)
+      .catch((e: Error) => setSavePhotoError(e.message))
+      .finally(() => setSavingPhoto(false));
+  }, [swapResult]);
+
+  const saveVideoToGallery = useCallback(() => {
+    if (videoResult == null) return;
+    setSaveVideoError(null);
+    setSavingVideo(true);
+    saveToGallery(videoResult.outputPath, 'video/mp4')
+      .then(setSavedVideoUri)
+      .catch((e: Error) => setSaveVideoError(e.message))
+      .finally(() => setSavingVideo(false));
+  }, [videoResult]);
 
   const pickSource = useCallback(() => {
     pickMedia('image').then((path) => path && setSourcePath(path));
@@ -754,6 +798,35 @@ export default function App() {
                     resizeMode="contain"
                   />
                 </View>
+
+                {/* Copies outputPath (this app's own private storage) into MediaStore, so
+                    it shows up in the Photos app and survives an uninstall. */}
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={saveSwapToGallery}
+                  disabled={savingPhoto}
+                >
+                  {savingPhoto ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Text style={styles.secondaryButtonText}>
+                      Save to Gallery
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                {savedPhotoUri != null && (
+                  <Text
+                    style={styles.resultPathText}
+                    numberOfLines={1}
+                    ellipsizeMode="middle"
+                  >
+                    Saved: {savedPhotoUri}
+                  </Text>
+                )}
+                {savePhotoError != null && (
+                  <Text style={styles.errorText}>{savePhotoError}</Text>
+                )}
               </View>
             )}
 
@@ -972,6 +1045,33 @@ export default function App() {
                 >
                   {videoResult.outputPath}
                 </Text>
+
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={saveVideoToGallery}
+                  disabled={savingVideo}
+                >
+                  {savingVideo ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Text style={styles.secondaryButtonText}>
+                      Save to Gallery
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                {savedVideoUri != null && (
+                  <Text
+                    style={styles.resultPathText}
+                    numberOfLines={1}
+                    ellipsizeMode="middle"
+                  >
+                    Saved: {savedVideoUri}
+                  </Text>
+                )}
+                {saveVideoError != null && (
+                  <Text style={styles.errorText}>{saveVideoError}</Text>
+                )}
               </View>
             )}
           </View>
