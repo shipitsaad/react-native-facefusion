@@ -32,13 +32,27 @@ npm install react-native-facefusion
 ```sh
 # 2. Get Qualcomm's QAIRT SDK (Community edition — a plain ZIP, no account needed):
 #    https://www.qualcomm.com/developer/software/qualcomm-ai-runtime-sdk-qairt
-# Then copy out of the ZIP into your app's android/ tree:
-#   include/QNN/                                       -> android/src/main/cpp/include/QNN/
-#   lib/aarch64-android/libQnnHtp.so                    -> android/src/main/jniLibs/arm64-v8a/
-#   lib/aarch64-android/libQnnSystem.so                 -> android/src/main/jniLibs/arm64-v8a/
-#   lib/aarch64-android/libQnnHtpV{73,79,81}Stub.so     -> android/src/main/jniLibs/arm64-v8a/
-#   lib/hexagon-v{73,79,81}/unsigned/libQnnHtpV{73,79,81}Skel.so -> android/src/main/jniLibs/arm64-v8a/
+#
+# Copy out of the ZIP into THIS PACKAGE's directory (not your app's) -- CMake resolves
+# the headers relative to its own source dir, so they have to live here:
+#
+#   PKG=node_modules/react-native-facefusion/android/src/main
+#
+#   include/QNN/                                -> $PKG/cpp/include/QNN/
+#   lib/aarch64-android/libQnnHtp.so            -> $PKG/jniLibs/arm64-v8a/
+#   lib/aarch64-android/libQnnSystem.so         -> $PKG/jniLibs/arm64-v8a/
+#   lib/aarch64-android/libQnnHtpV{73,79,81}Stub.so -> $PKG/jniLibs/arm64-v8a/
+#   lib/hexagon-v{73,79,81}/unsigned/libQnnHtpV{73,79,81}Skel.so -> $PKG/jniLibs/arm64-v8a/
+#
+# Leave out libQnnHtpPrepare.so -- it's the on-device graph compiler (82 MB) and the
+# models arrive pre-compiled, so it is exactly the step this never performs.
 ```
+
+**Script steps 1 and 2.** Both write into `node_modules/`, so a fresh `npm install`
+or `npm ci` wipes them. Put them in a checked-in setup script (or a `postinstall`)
+rather than running them by hand once and forgetting — a CI machine or a new
+teammate's clone will otherwise fail at CMake configure with a message naming the
+missing piece.
 
 Your app's `android/app/build.gradle` also needs:
 
