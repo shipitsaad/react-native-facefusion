@@ -39,20 +39,22 @@ import {
   type DetectedFace,
 } from 'react-native-facefusion';
 
-// App-specific external storage (getExternalFilesDir) — avoids scoped storage restrictions
-// Push photos via: `adb push face.jpg /sdcard/Android/data/facefusion.example/files/source.jpg`
-const DEFAULT_SOURCE =
-  '/sdcard/Android/data/facefusion.example/files/source.jpg';
-const DEFAULT_TARGET =
-  '/sdcard/Android/data/facefusion.example/files/target.jpg';
-const DEFAULT_OUTPUT =
-  '/sdcard/Android/data/facefusion.example/files/swapped.jpg';
-// Same directory, a clip instead of a photo — push via:
-// `adb push clip.mp4 /sdcard/Android/data/facefusion.example/files/target.mp4`
-const DEFAULT_VIDEO_TARGET =
-  '/sdcard/Android/data/facefusion.example/files/target.mp4';
-const DEFAULT_VIDEO_OUTPUT =
-  '/sdcard/Android/data/facefusion.example/files/swapped.mp4';
+// App-specific external storage (getExternalFilesDir) — avoids scoped storage restrictions.
+const FILES_DIR = '/sdcard/Android/data/facefusion.example/files';
+
+// INPUTS START EMPTY, ON PURPOSE. They used to be pre-filled with
+// `${FILES_DIR}/source.jpg` etc, which does not exist on a fresh install -- so the
+// fields looked ready, the obvious first action was Run Swap, and the app answered
+// "Could not decode image". A first run that fails by default is worse than an empty
+// field that tells you what to do, so the placeholder now points at the picker.
+const DEFAULT_SOURCE = '';
+const DEFAULT_TARGET = '';
+const DEFAULT_VIDEO_TARGET = '';
+
+// Outputs keep a real default: nobody should have to type a path for a file the app
+// is about to write itself.
+const DEFAULT_OUTPUT = `${FILES_DIR}/swapped.jpg`;
+const DEFAULT_VIDEO_OUTPUT = `${FILES_DIR}/swapped.mp4`;
 
 /**
  * Opens the system document picker via the example app's own `MediaPickerModule`
@@ -405,6 +407,25 @@ export default function App() {
 
   const isReady = models?.ready === true;
 
+  // Why "Run Swap" is unavailable, in the user's words. A dimmed button with no
+  // explanation is the worst state a first-time user can land in -- they cannot tell
+  // a missing 317 MB download apart from an unpicked file. `null` means good to go.
+  const photoBlocker = !isReady
+    ? 'Download the models first — see Device & Models.'
+    : sourcePath.trim() === ''
+      ? 'Choose a source face in step 1.'
+      : targetPath.trim() === ''
+        ? 'Choose a target photo in step 2.'
+        : null;
+
+  const videoBlocker = !isReady
+    ? 'Download the models first — see Device & Models.'
+    : sourcePath.trim() === ''
+      ? 'Choose a source face in the Photo card above.'
+      : videoTargetPath.trim() === ''
+        ? 'Choose a target clip.'
+        : null;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar
@@ -490,118 +511,25 @@ export default function App() {
               </TouchableOpacity>
             )}
 
-            {/* ============= ADVANCED OPTIONS (shared by photo + video below) ============= */}
             <View style={styles.card}>
-              <TouchableOpacity
-                style={styles.labelRow}
-                onPress={() => setOptionsExpanded((v) => !v)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.cardTitle}>Advanced Options</Text>
-                <Text style={styles.pickLink}>
-                  {optionsExpanded ? 'Hide ▲' : 'Show ▼'}
-                </Text>
-              </TouchableOpacity>
-
-              {optionsExpanded && (
-                <View style={styles.optionsBody}>
-                  <NumberStepper
-                    label="Blend (source ↔ target identity)"
-                    value={swapperWeight}
-                    onChange={setSwapperWeight}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Mask blur"
-                    value={maskBlur}
-                    onChange={setMaskBlur}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Mask padding"
-                    value={maskPadding}
-                    onChange={setMaskPadding}
-                    min={0}
-                    max={100}
-                    step={5}
-                    format={(v) => `${v}%`}
-                  />
-                  <NumberStepper
-                    label="Detector confidence"
-                    value={detectorScore}
-                    onChange={setDetectorScore}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Landmarker confidence"
-                    value={landmarkerScore}
-                    onChange={setLandmarkerScore}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Pixel boost"
-                    value={pixelBoost}
-                    onChange={(v) => setPixelBoost(Math.round(v))}
-                    min={1}
-                    max={4}
-                    step={1}
-                    format={(v) => `${v}× (${256 * v}px)`}
-                  />
-                  <ToggleRow
-                    label="Swap largest face only (target)"
-                    value={largestFaceOnly}
-                    onChange={setLargestFaceOnly}
-                  />
-                  <ToggleRow
-                    label={
-                      models?.hasEnhancer
-                        ? 'Face enhancer'
-                        : 'Face enhancer (not downloaded)'
-                    }
-                    value={faceEnhance}
-                    onChange={setFaceEnhance}
-                    disabled={!models?.hasEnhancer}
-                  />
-                  {faceEnhance && (
-                    <NumberStepper
-                      label="Enhancer blend"
-                      value={faceEnhancerBlend}
-                      onChange={setFaceEnhancerBlend}
-                      min={0}
-                      max={1}
-                      step={0.1}
-                    />
-                  )}
-                </View>
-              )}
-            </View>
-
-            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Photo</Text>
               <Text style={styles.hint}>
-                Push photos via adb:{'\n'}
-                adb push face.jpg
-                /sdcard/Android/data/facefusion.example/files/source.jpg
+                The face from step 1 replaces the face in step 2.
               </Text>
 
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>Source Path</Text>
+                <Text style={styles.inputLabel}>
+                  <Text style={styles.stepNumber}>1</Text> Source face
+                </Text>
                 <TouchableOpacity onPress={pickSource}>
-                  <Text style={styles.pickLink}>Pick…</Text>
+                  <Text style={styles.pickLink}>Choose photo…</Text>
                 </TouchableOpacity>
               </View>
               <TextInput
                 style={styles.input}
                 value={sourcePath}
                 onChangeText={setSourcePath}
-                placeholder="source path"
+                placeholder="Tap “Choose photo…” — the face to copy from"
                 placeholderTextColor="#636366"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -656,16 +584,18 @@ export default function App() {
               )}
 
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>Target Path</Text>
+                <Text style={styles.inputLabel}>
+                  <Text style={styles.stepNumber}>2</Text> Target photo
+                </Text>
                 <TouchableOpacity onPress={pickTarget}>
-                  <Text style={styles.pickLink}>Pick…</Text>
+                  <Text style={styles.pickLink}>Choose photo…</Text>
                 </TouchableOpacity>
               </View>
               <TextInput
                 style={styles.input}
                 value={targetPath}
                 onChangeText={setTargetPath}
-                placeholder="target path"
+                placeholder="Tap “Choose photo…” — the photo to change"
                 placeholderTextColor="#636366"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -723,12 +653,12 @@ export default function App() {
                 </View>
               )}
 
-              <Text style={styles.inputLabel}>Output Path</Text>
+              <Text style={styles.inputLabel}>Output file</Text>
               <TextInput
                 style={styles.input}
                 value={outputPath}
                 onChangeText={setOutputPath}
-                placeholder="output path"
+                placeholder="where to write the result"
                 placeholderTextColor="#636366"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -737,18 +667,24 @@ export default function App() {
               <TouchableOpacity
                 style={[
                   styles.primaryButton,
-                  (swapping || !isReady) && styles.buttonDisabled,
+                  (swapping || photoBlocker != null) && styles.buttonDisabled,
                 ]}
                 onPress={swap}
-                disabled={swapping || !isReady}
+                disabled={swapping || photoBlocker != null}
                 activeOpacity={0.8}
               >
                 {swapping ? (
                   <ActivityIndicator size="small" color="#000000" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Run Swap</Text>
+                  <Text style={styles.primaryButtonText}>
+                    <Text style={styles.stepNumber}>3</Text> Run Swap
+                  </Text>
                 )}
               </TouchableOpacity>
+
+              {photoBlocker != null && !swapping && (
+                <Text style={styles.blockerText}>{photoBlocker}</Text>
+              )}
             </View>
 
             {/* Live Preview -- the swapped frame, drawn natively straight into this view's
@@ -832,25 +768,24 @@ export default function App() {
 
             {/* ============= VIDEO SWAP ============= */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Video (Phase 7)</Text>
+              <Text style={styles.cardTitle}>Video</Text>
               <Text style={styles.hint}>
-                Same source face above, swapped into every frame of a clip. Runs
-                behind a foreground service — expect it to take a while.{'\n'}
-                adb push clip.mp4
-                /sdcard/Android/data/facefusion.example/files/target.mp4
+                The same source face from step 1, swapped into every frame of a
+                clip. Keeps running if you leave the app, and a long clip takes
+                a while — roughly 10 frames a second at 720p.
               </Text>
 
               <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>Target Video Path</Text>
+                <Text style={styles.inputLabel}>Target clip</Text>
                 <TouchableOpacity onPress={pickVideoTarget}>
-                  <Text style={styles.pickLink}>Pick…</Text>
+                  <Text style={styles.pickLink}>Choose video…</Text>
                 </TouchableOpacity>
               </View>
               <TextInput
                 style={styles.input}
                 value={videoTargetPath}
                 onChangeText={setVideoTargetPath}
-                placeholder="target video path"
+                placeholder="Tap “Choose video…” — the clip to change"
                 placeholderTextColor="#636366"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -949,10 +884,11 @@ export default function App() {
               <TouchableOpacity
                 style={[
                   styles.primaryButton,
-                  (videoSwapping || !isReady) && styles.buttonDisabled,
+                  (videoSwapping || videoBlocker != null) &&
+                    styles.buttonDisabled,
                 ]}
                 onPress={swapVid}
-                disabled={videoSwapping || !isReady}
+                disabled={videoSwapping || videoBlocker != null}
                 activeOpacity={0.8}
               >
                 {videoSwapping ? (
@@ -961,6 +897,10 @@ export default function App() {
                   <Text style={styles.primaryButtonText}>Run Video Swap</Text>
                 )}
               </TouchableOpacity>
+
+              {videoBlocker != null && !videoSwapping && (
+                <Text style={styles.blockerText}>{videoBlocker}</Text>
+              )}
 
               {videoSwapping && (
                 <TouchableOpacity
@@ -1074,6 +1014,103 @@ export default function App() {
                 )}
               </View>
             )}
+            {/* ===== Advanced options. Deliberately LAST: these are expert
+                controls (mask blur, detector confidence, pixel boost) and a
+                first-time user should reach Source -> Target -> Run before
+                ever seeing them. They apply to both the photo and video swap
+                above. ===== */}
+            <View style={styles.card}>
+              <TouchableOpacity
+                style={styles.labelRow}
+                onPress={() => setOptionsExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cardTitle}>Advanced Options</Text>
+                <Text style={styles.pickLink}>
+                  {optionsExpanded ? 'Hide ▲' : 'Show ▼'}
+                </Text>
+              </TouchableOpacity>
+
+              {optionsExpanded && (
+                <View style={styles.optionsBody}>
+                  <NumberStepper
+                    label="Blend (source ↔ target identity)"
+                    value={swapperWeight}
+                    onChange={setSwapperWeight}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Mask blur"
+                    value={maskBlur}
+                    onChange={setMaskBlur}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Mask padding"
+                    value={maskPadding}
+                    onChange={setMaskPadding}
+                    min={0}
+                    max={100}
+                    step={5}
+                    format={(v) => `${v}%`}
+                  />
+                  <NumberStepper
+                    label="Detector confidence"
+                    value={detectorScore}
+                    onChange={setDetectorScore}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Landmarker confidence"
+                    value={landmarkerScore}
+                    onChange={setLandmarkerScore}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <NumberStepper
+                    label="Pixel boost"
+                    value={pixelBoost}
+                    onChange={(v) => setPixelBoost(Math.round(v))}
+                    min={1}
+                    max={4}
+                    step={1}
+                    format={(v) => `${v}× (${256 * v}px)`}
+                  />
+                  <ToggleRow
+                    label="Swap largest face only (target)"
+                    value={largestFaceOnly}
+                    onChange={setLargestFaceOnly}
+                  />
+                  <ToggleRow
+                    label={
+                      models?.hasEnhancer
+                        ? 'Face enhancer'
+                        : 'Face enhancer (not downloaded)'
+                    }
+                    value={faceEnhance}
+                    onChange={setFaceEnhance}
+                    disabled={!models?.hasEnhancer}
+                  />
+                  {faceEnhance && (
+                    <NumberStepper
+                      label="Enhancer blend"
+                      value={faceEnhancerBlend}
+                      onChange={setFaceEnhancerBlend}
+                      min={0}
+                      max={1}
+                      step={0.1}
+                    />
+                  )}
+                </View>
+              )}
+            </View>
           </View>
         ) : (
           /* ================= DEVICE & MODELS VIEW ================= */
@@ -1081,7 +1118,7 @@ export default function App() {
             {/* Device Section */}
             <View style={styles.card}>
               <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitle}>Device Probe</Text>
+                <Text style={styles.cardTitle}>Device</Text>
                 {probing && <ActivityIndicator size="small" color="#8e8e93" />}
               </View>
 
@@ -1401,6 +1438,20 @@ const styles = StyleSheet.create({
     color: '#8e8e93',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  // The step number badge in "1 Source face" / "2 Target photo" / "3 Run Swap" --
+  // the flow used to be implicit and a first-time user had to infer the order.
+  stepNumber: {
+    color: '#0a84ff',
+    fontWeight: '700',
+  },
+  // Why the primary button is disabled, said out loud. Amber, not red: nothing has
+  // gone wrong yet, the user just has a step left.
+  blockerText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#ff9f0a',
+    textAlign: 'center',
   },
   hint: {
     fontSize: 11,
