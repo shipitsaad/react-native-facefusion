@@ -37,6 +37,23 @@ react {
     //   The cli.js file which is the React Native CLI entrypoint. Default is ../../node_modules/react-native/cli.js
     cliFile = new File(resolvedReactNativeDir, "cli.js")
 
+    // The Hermes bytecode compiler. Only a RELEASE build runs it, which is why this went
+    // unnoticed through every debug build and both on-device sessions: `assembleRelease`
+    // failed with
+    //   Couldn't determine Hermesc location ...
+    //     node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc
+    // Two things moved. RN 0.85 ships hermesc in its own `hermes-compiler` package rather
+    // than under react-native/sdks/, and npm hoists that to the REPO root while the
+    // plugin's default looks relative to this app. Same root cause as reactNativeDir and
+    // @react-native/gradle-plugin above (ADR-0011), just on a path only release takes.
+    //
+    // %OS-BIN% is substituted by the plugin itself (osx-bin / linux64-bin / win64-bin),
+    // so it must survive into the string rather than be resolved here.
+    hermesCommand = new File(
+        resolveNodeModuleDir('hermes-compiler/package.json'),
+        "hermesc/%OS-BIN%/hermesc"
+    ).absolutePath
+
     /* Variants */
     //   The list of variants to that are debuggable. For those we're going to
     //   skip the bundling of the JS bundle and the assets. Default is "debug", "debugOptimized".

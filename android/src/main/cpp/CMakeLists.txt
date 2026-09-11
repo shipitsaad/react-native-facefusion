@@ -55,3 +55,19 @@ target_include_directories(ffnative PRIVATE
 # headers alone and why useLegacyPackaging must stay true (docs/01-architecture.md).
 target_link_libraries(ffnative android log dl)
 target_compile_options(ffnative PRIVATE -O3 -fvisibility=hidden -Wall)
+
+# 16 KB page size (Android 15+). Devices with 16 KB pages cannot load a library whose
+# LOAD segments are aligned to the old 4 KB assumption, and Android 15 shows the user a
+# compatibility warning for any APK containing one.
+#
+# Measured on the v0.1.0 release APK before this line existed: 15 of 19 libraries were
+# already aligned to 0x4000, INCLUDING every React Native and Hermes library -- so the
+# toolchain is not the problem and the note in docs/MEMORY.md claiming otherwise was
+# wrong. Exactly four were 0x1000: this library, and Qualcomm's three
+# libQnnHtpV{73,79,81}Skel.so.
+#
+# This flag fixes ours. The three Skel files are prebuilt binaries shipped in the QAIRT
+# SDK, so they can only be fixed by Qualcomm -- and they are Hexagon DSP images loaded
+# over fastrpc rather than mapped into the app's own address space, so the host-side
+# alignment is about the packaging check rather than about whether they can run.
+target_link_options(ffnative PRIVATE "-Wl,-z,max-page-size=16384")

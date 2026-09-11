@@ -189,11 +189,15 @@ aggregate 10% rate, and the native-error-means-refusal path.
   once, so an uncapped 50 MP photo — the main camera on the phones this library
   requires — needs ~950 MB and cannot run at all. Videos are unaffected; they process
   at the clip's own resolution.
-- **Not yet 16 KB page-size compatible.** Android 15+ warns on debug builds when
-  native libraries aren't aligned for 16 KB memory pages. This affects the whole
-  current toolchain, not just this package's own `.so` files — stock React
-  Native/Hermes libraries are flagged too. Non-blocking today; worth checking again
-  as 16 KB-page devices become real.
+- **Three Qualcomm libraries are not 16 KB page-size aligned.** Android 15+ warns when
+  an APK contains a native library aligned to the old 4 KB page assumption. Measured
+  across all 19 libraries in a release build: 16 are aligned correctly, including this
+  package's own `libffnative.so` and every React Native and Hermes library. The three
+  that are not are `libQnnHtpV{73,79,81}Skel.so`, which ship prebuilt in Qualcomm's
+  QAIRT SDK and can only be fixed upstream. They are Hexagon DSP images loaded over
+  fastrpc rather than mapped into the app's address space, so this is a packaging-check
+  warning rather than a loading failure — but the warning is shown to users on Android
+  15+, and it will not go away until Qualcomm ships aligned builds.
 
 ## Performance
 
