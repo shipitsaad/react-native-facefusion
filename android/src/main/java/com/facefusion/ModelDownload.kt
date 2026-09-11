@@ -56,6 +56,22 @@ object ModelDownload {
 
   private const val BASE = "https://huggingface.co/$REPO/resolve/main/"
   private const val TAG = "ffmodels"
+
+  /**
+   * What a manifest entry's `name` is allowed to be: a bare `.bin` filename, nothing else.
+   *
+   * The name arrives from a **remote** JSON and is then used both as a URL suffix and as
+   * `File(dir, name)`. Without this, a `name` of `../../shared_prefs/something` would write
+   * outside the models directory — and SHA-256 verification is no defence at all here,
+   * because the same manifest that supplies the path also supplies the expected hash.
+   *
+   * This is not a hypothetical about upstream's intentions; it is that this is a library
+   * other people ship, the host is a third party neither they nor we control, and the check
+   * costs one regex. A rejected entry throws rather than being skipped: a downloader that
+   * quietly ignores part of the set produces a half-tier that fails later inside Qualcomm's
+   * runtime, which is the exact failure mode this file's header says to avoid.
+   */
+  private val SAFE_NAME = Regex("""^[A-Za-z0-9][A-Za-z0-9._-]*\.bin$""")
   private const val CONNECT_TIMEOUT_MS = 30_000
   private const val READ_TIMEOUT_MS = 60_000
   private const val BUFFER = 1 shl 16
@@ -101,7 +117,13 @@ object ModelDownload {
       tier = tier,
       files = (0 until files.length()).map {
         val o = files.getJSONObject(it)
-        ModelFile(o.getString("name"), o.getLong("bytes"), o.getString("sha256"))
+        val name = o.getString("name")
+        // Validated here, at the parse boundary, so nothing downstream can ever hold an
+        // unsafe name -- see [SAFE_NAME].
+        if (!SAFE_NAME.matches(name)) {
+          throw IOException("manifest for $tier names an unacceptable file: '$name'")
+        }
+        ModelFile(name, o.getLong("bytes"), o.getString("sha256"))
       },
     )
   }
