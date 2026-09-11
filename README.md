@@ -78,6 +78,7 @@ import {
   swapVideo,
   detectSourceFaces,
   detectTargetFaces,
+  saveToGallery,
   FacefusionPreview,
 } from 'react-native-facefusion';
 
@@ -108,6 +109,10 @@ const videoResult = await swapVideo(sourcePath, targetPath, outputPath, {
 // the chosen box back into swapPhoto/swapVideo as sourceFaceBox / targetFaceBox.
 const sourceFaces = await detectSourceFaces(sourcePath);
 const targetFaces = await detectTargetFaces(targetPath);
+
+// Copy an output into the Photos app -- swapPhoto/swapVideo write to your own
+// app's private storage, not somewhere the user can see without this.
+const uri = await saveToGallery(result.outputPath, 'image/jpeg');
 ```
 
 ```tsx
@@ -148,12 +153,14 @@ Known limits of this port, stated plainly rather than hidden:
   array before any cropping happens. A typical phone-camera photo is well under the
   ceiling that triggers this; a multi-thousand-pixel press photo is not. Not yet
   fixed — needs a decode-time max-dimension downscale.
-- **No "save to gallery."** `swapPhoto`/`swapVideo` write to the path you give them;
-  this package does no `MediaStore` integration of its own. Write your output
-  somewhere world-readable, or add your own save step.
 - **The content gate's true-positive path is unverified.** Every test swap run
   against real hardware so far has been clean content, which only confirms clean
   content isn't wrongly flagged.
+- **Not yet 16 KB page-size compatible.** Android 15+ warns on debug builds when
+  native libraries aren't aligned for 16 KB memory pages. This affects the whole
+  current toolchain, not just this package's own `.so` files — stock React
+  Native/Hermes libraries are flagged too. Non-blocking today; worth checking again
+  as 16 KB-page devices become real.
 
 ## Performance
 
