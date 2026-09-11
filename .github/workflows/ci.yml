@@ -14,8 +14,26 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# What this CI can and cannot prove, stated up front so nobody mistakes a green tick
+# for more than it is:
+#
+#   CAN   -- lint/typecheck, that the package builds, that the TARBALL is correct
+#            (no proprietary bytes, nothing required missing), that a foreign app can
+#            install it, autolink it, resolve its types, fetch the upstream C++ with
+#            hash verification, and compile the library's Kotlin.
+#   CANNOT -- build libffnative.so or run anything. The QAIRT SDK is proprietary and
+#            has no public download, so no CI runner can have it. Inference is only
+#            ever proven on a real Snapdragon phone (CLAUDE.md rule 10).
+#
+# The previous version of this file built the example app. That could never have
+# passed: the example build needs both the QAIRT SDK and the fetched upstream C++,
+# and CI has neither. It was replaced with the clean-consumer test instead, which is
+# what actually catches the class of bug that reaches other people -- see
+# docs/07-journal/2026-09-11-testing-the-package-as-a-stranger-would.md.
+
 jobs:
   lint:
+    name: Lint and typecheck
     runs-on: ubuntu-latest
 
     steps:
@@ -31,8 +49,8 @@ jobs:
       - name: Typecheck files
         run: npm run typecheck
 
-
-  build-library:
+  package:
+    name: Tarball contents
     runs-on: ubuntu-latest
 
     steps:
@@ -45,11 +63,60 @@ jobs:
       - name: Build package
         run: npm run prepare
 
-  build-android:
-    runs-on: ubuntu-latest
+      - name: Pack
+        run: npm pack --pack-destination /tmp
 
-    env:
-      TURBO_CACHE_DIR: .turbo/android
+      # THE LICENCE REGRESSION TEST. `npm publish` once would have shipped 45 MB of
+      # Qualcomm's QAIRT runtime and 215 proprietary headers, because package.json's
+      # `files` listed "android" wholesale -- and npm's `files` OVERRIDES .gitignore,
+      # so every git-side guard this repo has (hardened .gitignore, the
+      # `git add -An --all` rule, a history audit) was pointed at the wrong thing.
+      # Redistributing that runtime standalone is not permitted (docs/05-licensing.md
+      # §2). This step is the check that would have caught it.
+      - name: No proprietary content in the tarball
+        run: |
+          set -euo pipefail
+          tar -tzf /tmp/react-native-facefusion-*.tgz > /tmp/files.txt
+          echo "Tarball has $(wc -l < /tmp/files.txt) entries."
+          if grep -nEi 'libQnn|\.so$|\.bin$|include/QNN/|hexagon' /tmp/files.txt; then
+            echo "::error::Proprietary QAIRT/QNN content found in the tarball. \
+          Redistributing Qualcomm's runtime on a standalone basis is not permitted -- \
+          see docs/05-licensing.md. Check the files array in package.json; it overrides .gitignore."
+            exit 1
+          fi
+          echo "OK -- no QNN runtime, headers, or model binaries."
+
+      # The mirror image, and the other half of the same lesson: the audit found the
+      # tarball was ALSO missing scripts/fetch-upstream.sh and patches/, which made
+      # the README's install steps impossible for every installer. Clean is not enough;
+      # it has to be complete.
+      - name: Nothing required is missing from the tarball
+        run: |
+          set -euo pipefail
+          required=(
+            package/package.json
+            package/README.md
+            package/LICENSE
+            package/scripts/fetch-upstream.sh
+            package/patches/ffjni-analyse-faces.patch
+            package/third_party/facefusion-mobile/NOTICE
+            package/lib/module/index.js
+            package/lib/typescript/src/index.d.ts
+            package/android/build.gradle
+            package/android/src/main/AndroidManifest.xml
+            package/android/src/main/cpp/CMakeLists.txt
+            package/android/src/main/java/com/facefusion/mobile/NativePipe.kt
+            package/android/src/main/java/com/facefusion/ContentGate.kt
+          )
+          fail=0
+          for f in "${required[@]}"; do
+            if grep -qxF "$f" /tmp/files.txt; then echo "  ok $f"; else echo "  MISSING $f"; fail=1; fi
+          done
+          [ "$fail" -eq 0 ] || { echo "::error::The tarball is missing files the install needs."; exit 1; }
+
+  consumer:
+    name: Clean-consumer install
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -58,49 +125,230 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      - name: Cache turborepo for Android
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: ${{ env.TURBO_CACHE_DIR }}
-          key: ${{ runner.os }}-turborepo-android-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-turborepo-android-
-
-      - name: Check turborepo cache for Android
+      # Packed here rather than passed between jobs as an artifact, to keep this
+      # workflow free of any action whose pinned SHA cannot be verified from here.
+      - name: Build and pack
         run: |
-          TURBO_CACHE_STATUS=$(node -p "($(npx turbo run build:android --cache-dir="${{ env.TURBO_CACHE_DIR }}" --dry=json)).tasks.find(t => t.task === 'build:android').cache.status")
-
-          if [[ $TURBO_CACHE_STATUS == "HIT" ]]; then
-            echo "turbo_cache_hit=1" >> $GITHUB_ENV
-          fi
+          set -euo pipefail
+          npm run prepare
+          npm pack --pack-destination /tmp
 
       - name: Install JDK
-        if: env.turbo_cache_hit != 1
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Finalize Android SDK
-        if: env.turbo_cache_hit != 1
+      # Pinned to match docs/03-setup.md. Needed even though no native build can
+      # succeed here: Gradle resolves ndkVersion while configuring the library module.
+      - name: Install NDK and CMake
         run: |
-          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" "cmake;3.22.1" > /dev/null
 
-
-      - name: Cache Gradle
-        if: env.turbo_cache_hit != 1
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: |
-            ~/.gradle/wrapper
-            ~/.gradle/caches
-          key: ${{ runner.os }}-gradle-${{ hashFiles('example/android/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Build example for Android
-        env:
-          JAVA_OPTS: "-XX:MaxHeapSize=6g"
+      # A GENERATED app, not example/. example/ has no dependency on this package at
+      # all -- a Babel alias points it at ../src and autolinking at the repo-root
+      # android/ -- so it tests the code and never the packaging. And the tarball is
+      # INSTALLED, never `npm link`ed: a link symlinks the whole repo into
+      # node_modules and bypasses the `files` array entirely, so a package missing
+      # half its contents would still pass.
+      - name: Generate a fresh React Native app
         run: |
-          npx turbo run build:android --cache-dir="${{ env.TURBO_CACHE_DIR }}"
+          set -euo pipefail
+          cd /tmp
+          npx --yes @react-native-community/cli@latest init ConsumerApp \
+            --version 0.85.0 --skip-git-init --install-pods false
 
+      - name: Install the tarball into it
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp
+          npm install /tmp/react-native-facefusion-*.tgz --no-audit --no-fund
+
+      - name: Autolinking discovers the native module
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp
+          npx react-native config > /tmp/rn-config.json
+          node -e '
+            const c = require("/tmp/rn-config.json");
+            const d = c.dependencies["react-native-facefusion"];
+            if (!d) { console.error("NOT DISCOVERED by autolinking"); process.exit(1); }
+            const a = d.platforms.android;
+            if (!a || !a.sourceDir) { console.error("no android platform config"); process.exit(1); }
+            if (!/FacefusionPackage/.test(a.packageInstance || "")) {
+              console.error("unexpected packageInstance: " + a.packageInstance); process.exit(1);
+            }
+            // iOS was removed deliberately (ADR-0015). If this ever becomes non-null
+            // without an iOS implementation, consumers get a broken pod install.
+            if (d.platforms.ios !== null) {
+              console.error("ios platform config is not null: " + JSON.stringify(d.platforms.ios));
+              process.exit(1);
+            }
+            console.log("OK -- " + a.packageInstance + ", ios: null");
+          '
+
+      - name: Published entry points resolve
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp
+          node -e '
+            const fs = require("fs"), path = require("path");
+            const base = "./node_modules/react-native-facefusion";
+            const pkg = require(base + "/package.json");
+            const e = pkg.exports["."];
+            const checks = {
+              main: pkg.main, types: pkg.types,
+              "exports.default": e.default, "exports.types": e.types,
+              "exports.source": e["react-native-facefusion-source"],
+            };
+            let fail = 0;
+            for (const [label, rel] of Object.entries(checks)) {
+              const ok = rel && fs.existsSync(path.join(base, rel));
+              console.log((ok ? "  ok " : "  MISSING ") + label + " -> " + rel);
+              if (!ok) fail = 1;
+            }
+            // Every function the README documents must actually be exported.
+            const src = fs.readFileSync(path.join(base, pkg.main), "utf8");
+            for (const name of ["probeDevice","getModelStatus","downloadModels","cancelModelDownload",
+                                "swapPhoto","swapVideo","cancelVideoSwap","detectSourceFaces",
+                                "detectTargetFaces","saveToGallery","FacefusionPreview"]) {
+              if (!src.includes(name)) { console.log("  MISSING export " + name); fail = 1; }
+            }
+            process.exit(fail);
+          '
+
+      - name: Consumer typechecks against the published types
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp
+          cat > Consumer.tsx <<'TSX'
+          import React from 'react';
+          import {Text} from 'react-native';
+          import {
+            probeDevice, getModelStatus, downloadModels, cancelModelDownload,
+            swapPhoto, swapVideo, cancelVideoSwap, detectSourceFaces,
+            detectTargetFaces, saveToGallery, FacefusionPreview,
+          } from 'react-native-facefusion';
+
+          export default function Consumer() {
+            React.useEffect(() => {
+              probeDevice().then(d => {
+                const s: string = d.tier;
+                const n: number = d.arch + d.vtcmMb + d.socModel;
+                const b: boolean = d.ok && d.signedPd;
+                void s; void n; void b;
+              });
+            }, []);
+            void [getModelStatus, downloadModels, cancelModelDownload, swapPhoto,
+                 swapVideo, cancelVideoSwap, detectSourceFaces, detectTargetFaces,
+                 saveToGallery];
+            return <><Text>ok</Text><FacefusionPreview style={{width: 10, height: 10}} /></>;
+          }
+          TSX
+          npx tsc --noEmit
+
+      # Before fetching: the first CMake guard must fire with a message that names the
+      # script to run. This is the likeliest error any new installer sees, so its text
+      # is part of the product. It must not point at docs/, which does not ship.
+      - name: CMake refuses clearly when the upstream C++ is absent
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp/android
+          if ./gradlew :react-native-facefusion:assembleDebug --no-daemon > /tmp/g1.log 2>&1; then
+            echo "::error::Expected the build to FAIL with no upstream C++ present, but it succeeded."
+            exit 1
+          fi
+          grep -q "Upstream C++ engine is missing" /tmp/g1.log \
+            || { echo "::error::Build failed, but not with the upstream-missing guard:"; tail -40 /tmp/g1.log; exit 1; }
+          grep -q "fetch-upstream.sh" /tmp/g1.log \
+            || { echo "::error::The guard does not name the script to run."; exit 1; }
+          ! grep -qE "docs/[0-9]" /tmp/g1.log \
+            || { echo "::error::The guard points at docs/, which does not ship in the package."; exit 1; }
+          echo "OK -- failed with an actionable message."
+
+      # Runs from inside node_modules, exactly as the README's step 1 tells a consumer
+      # to. Verifies upstream's bytes against NOTICE and exits non-zero on a mismatch;
+      # a `postinstall` depends on that exit code.
+      - name: Install step 1 -- fetch and verify the upstream C++
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp
+          ./node_modules/react-native-facefusion/scripts/fetch-upstream.sh | tee /tmp/fetch.log
+          test "$(grep -c '^  ok ' /tmp/fetch.log)" -eq 7 \
+            || { echo "::error::Expected 7 files verified against NOTICE."; exit 1; }
+          grep -q "analyseFaces" \
+            node_modules/react-native-facefusion/third_party/facefusion-mobile/cpp/ffjni.cpp \
+            || { echo "::error::patches/ffjni-analyse-faces.patch did not apply -- both face pickers would UnsatisfiedLinkError."; exit 1; }
+
+      - name: A hash mismatch stops the fetch and does not patch
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp/node_modules/react-native-facefusion
+          cp third_party/facefusion-mobile/NOTICE /tmp/NOTICE.bak
+          # Corrupt one recorded hash -- flip the first hex digit of the first one.
+          # This is what a silent upstream change would look like to the script.
+          node -e '
+            const fs = require("fs"), p = "third_party/facefusion-mobile/NOTICE";
+            const s = fs.readFileSync(p, "utf8");
+            const out = s.replace(/[0-9a-f]{64}/, m => (m[0] === "f" ? "e" : "f") + m.slice(1));
+            if (out === s) { console.error("could not find a hash to corrupt in NOTICE"); process.exit(1); }
+            fs.writeFileSync(p, out);
+          '
+          if ./scripts/fetch-upstream.sh > /tmp/bad.log 2>&1; then
+            cp /tmp/NOTICE.bak third_party/facefusion-mobile/NOTICE
+            echo "::error::A hash mismatch did NOT fail the fetch. Verification is not working."
+            exit 1
+          fi
+          grep -q "MISMATCH" /tmp/bad.log || { tail -20 /tmp/bad.log; exit 1; }
+          test "$(grep -c analyseFaces third_party/facefusion-mobile/cpp/ffjni.cpp)" -eq 0 \
+            || { echo "::error::The patch was applied despite a failed hash check."; exit 1; }
+          cp /tmp/NOTICE.bak third_party/facefusion-mobile/NOTICE
+          ./scripts/fetch-upstream.sh > /dev/null
+          echo "OK -- refused on mismatch, restored clean."
+
+      # After fetching, the second guard. No CI runner can have the QAIRT SDK, so this
+      # is the furthest a hosted build can get -- and the message a consumer sees here
+      # is the one that tells them where to put a 45 MB proprietary download.
+      - name: CMake refuses clearly when the QAIRT SDK is absent
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp/android
+          if ./gradlew :react-native-facefusion:assembleDebug --no-daemon > /tmp/g2.log 2>&1; then
+            echo "::error::Expected the build to FAIL with no QAIRT SDK present, but it succeeded."
+            exit 1
+          fi
+          grep -q "Qualcomm QNN headers are missing" /tmp/g2.log \
+            || { echo "::error::Build failed, but not with the QNN-missing guard:"; tail -40 /tmp/g2.log; exit 1; }
+          ! grep -qE "docs/[0-9]" /tmp/g2.log \
+            || { echo "::error::The guard points at docs/, which does not ship in the package."; exit 1; }
+          echo "OK -- failed with an actionable message."
+
+      # The real coverage. Kotlin compilation does NOT depend on the CMake tasks
+      # (verified 2026-09-11 by moving the QNN headers aside and compiling), so this
+      # proves the whole non-proprietary half end to end from a foreign app: Gradle
+      # wiring, autolinking, RN Codegen accepting the TurboModule spec, and every
+      # Kotlin source in the package. Everything except libffnative.so itself.
+      - name: The library's Kotlin compiles inside the consumer app
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp/android
+          ./gradlew :react-native-facefusion:compileDebugKotlin --no-daemon
+
+      # A consumer's minSdk always wins over the library's own default, so the library
+      # takes max(theirs, 31). Below that it must fail LOUDLY at manifest merge rather
+      # than silently building an APK that installs on Android 7 and crashes there.
+      - name: A consumer below minSdk 31 fails at manifest merge
+        run: |
+          set -euo pipefail
+          cd /tmp/ConsumerApp/android
+          sed -i 's/minSdkVersion = .*/minSdkVersion = 24/' build.gradle
+          if ./gradlew :app:processDebugMainManifest --no-daemon --rerun-tasks > /tmp/g3.log 2>&1; then
+            echo "::error::minSdk 24 built successfully. The library's minSdk floor is not being enforced."
+            tail -20 /tmp/g3.log
+            exit 1
+          fi
+          grep -q "cannot be smaller than version 31" /tmp/g3.log \
+            || { echo "::error::Failed, but not with the minSdk guard:"; tail -40 /tmp/g3.log; exit 1; }
+          echo "OK -- refused, naming the library and the required version."
