@@ -160,6 +160,12 @@ Known limits of this port, stated plainly rather than hidden:
 - A failure to run the check (a native error, not a flagged result) is always treated
   as a refusal, never as "allow."
 
+Both branches are verified on real hardware (Snapdragon 8 Elite, tier v79): every
+clean test swap passes the same check, and an NSFW test image scored ~0.8 against the
+0.25 threshold and was refused with `E_CONTENT` before the swap ran or any output file
+was written (2026-09-11). Not yet exercised on hardware: a video refused on the
+aggregate 10% rate, and the native-error-means-refusal path.
+
 ## Known issues
 
 - **A photo swap's output is capped at 2560 px on the long edge** (and a source photo
@@ -168,9 +174,6 @@ Known limits of this port, stated plainly rather than hidden:
   once, so an uncapped 50 MP photo — the main camera on the phones this library
   requires — needs ~950 MB and cannot run at all. Videos are unaffected; they process
   at the clip's own resolution.
-- **The content gate's true-positive path is unverified.** Every test swap run
-  against real hardware so far has been clean content, which only confirms clean
-  content isn't wrongly flagged.
 - **Not yet 16 KB page-size compatible.** Android 15+ warns on debug builds when
   native libraries aren't aligned for 16 KB memory pages. This affects the whole
   current toolchain, not just this package's own `.so` files — stock React
