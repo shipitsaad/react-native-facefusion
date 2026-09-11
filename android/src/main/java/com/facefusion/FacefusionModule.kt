@@ -330,6 +330,10 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
           putDouble("right", f.right.toDouble())
           putDouble("bottom", f.bottom.toDouble())
           putDouble("score", f.score.toDouble())
+          // The box's coordinate space. Not derivable by the caller: the analysed
+          // bitmap is capped for photos and uncapped for video frames -- see DetectedFace.
+          putInt("imageWidth", f.imageWidth)
+          putInt("imageHeight", f.imageHeight)
         }
       )
     }

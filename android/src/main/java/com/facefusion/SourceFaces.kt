@@ -5,7 +5,21 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.facefusion.mobile.NativePipe
 
-/** One face found in a source image, in the image's own pixel coordinates. */
+/**
+ * One face found in an image.
+ *
+ * The box is in the pixel coordinates of **the bitmap that was actually analysed**, which
+ * is not the file on disk: a source photo is decoded capped at [BitmapDecode.SOURCE_MAX],
+ * a photo target at [BitmapDecode.TARGET_MAX], and a video target not capped at all (its
+ * own frame size). That is deliberate — it is the same space [PhotoSwap]/[VideoSwap] crop
+ * in, which is what lets a box picked here be handed straight back as
+ * `SwapOptions.targetFaceBox` with no conversion.
+ *
+ * It also means a caller cannot work out the scale on their own, so [imageWidth] and
+ * [imageHeight] travel with every face. Without them, drawing this box over the original
+ * file — the obvious thing to do with a detection API — silently lands in the wrong place
+ * on any photo bigger than the cap, and there is no way to detect that from the outside.
+ */
 data class DetectedFace(
   val left: Float,
   val top: Float,
@@ -13,6 +27,10 @@ data class DetectedFace(
   val bottom: Float,
   /** Detector confidence, `0..1`. */
   val score: Float,
+  /** Width of the analysed bitmap, the space [left]/[right] are in. */
+  val imageWidth: Int,
+  /** Height of the analysed bitmap, the space [top]/[bottom] are in. */
+  val imageHeight: Int,
 )
 
 /**
@@ -57,7 +75,15 @@ object SourceFaces {
       val flat = NativePipe.analyseFaces(bgr, bitmap.width, bitmap.height)
         ?: throw IllegalStateException(NativePipe.lastError())
       (flat.indices step 5).map { i ->
-        DetectedFace(flat[i], flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4])
+        DetectedFace(
+          flat[i],
+          flat[i + 1],
+          flat[i + 2],
+          flat[i + 3],
+          flat[i + 4],
+          bitmap.width,
+          bitmap.height,
+        )
       }
     }
   }

@@ -119,6 +119,34 @@ export type DetectedFace = {
   bottom: number;
   /** Detector confidence, `0..1`. */
   score: number;
+  /**
+   * Width of the image **as actually analysed** — the coordinate space `left`/`right`
+   * are in, which is *not* the size of the file on disk.
+   *
+   * Large photos are subsampled during decode so they fit in memory (a 50 MP photo
+   * needs ~950 MB uncapped), and a video target is analysed at its own frame size with
+   * no cap at all. So the scale factor differs by input type and cannot be worked out
+   * from the file — use these two fields.
+   *
+   * You do not need them to pick a face: pass a box straight back as
+   * `SwapOptions.targetFaceBox`/`sourceFaceBox` and it lines up, because the swap crops
+   * in this same space. You *do* need them to draw the box over the original image or
+   * crop a thumbnail from it:
+   *
+   * ```ts
+   * const scaleX = displayedWidth / face.imageWidth;
+   * const scaleY = displayedHeight / face.imageHeight;
+   * const rect = {
+   *   left: face.left * scaleX,
+   *   top: face.top * scaleY,
+   *   width: (face.right - face.left) * scaleX,
+   *   height: (face.bottom - face.top) * scaleY,
+   * };
+   * ```
+   */
+  imageWidth: number;
+  /** Height of the image as actually analysed — see {@link DetectedFace.imageWidth}. */
+  imageHeight: number;
 };
 
 /** The result of one still-photo swap. */

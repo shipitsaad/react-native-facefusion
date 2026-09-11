@@ -42,7 +42,15 @@ object TargetFaces {
       val flat = NativePipe.analyseFaces(bgr, bitmap.width, bitmap.height)
         ?: throw IllegalStateException(NativePipe.lastError())
       (flat.indices step 5).map { i ->
-        DetectedFace(flat[i], flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4])
+        DetectedFace(
+          flat[i],
+          flat[i + 1],
+          flat[i + 2],
+          flat[i + 3],
+          flat[i + 4],
+          bitmap.width,
+          bitmap.height,
+        )
       }
     }
   }
