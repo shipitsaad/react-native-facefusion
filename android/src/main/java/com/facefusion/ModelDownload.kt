@@ -109,8 +109,22 @@ object ModelDownload {
     require(chain.isNotEmpty()) { "no tier requested" }
 
     val tiers = org.json.JSONObject(get(BASE + "manifest.json")).getJSONObject("tiers")
-    val tier = chain.firstOrNull { tiers.has(it) }
-      ?: throw IOException("no models published for any of ${chain.joinToString(", ")}")
+
+    // The best tier that is both published AND actually usable. "Published" is not enough:
+    // as of 2026-09-11 upstream publishes v81 whose only gate-shaped file is `nsfwq2`,
+    // which `Pipeline::init` never opens -- so an 8 Elite Gen 5 that downloaded v81 would
+    // fetch 305 MB and then fail init outright with "no content gate", which is a hard
+    // failure and not a recoverable one.
+    //
+    // Falling through to the next tier in the chain instead is exactly the machinery
+    // ADR-0007 exists for, keyed on "can the pipeline use this" rather than the weaker
+    // "does the manifest mention it". The native side then picks the same tier on its own,
+    // because it probes which tier's files are actually on disk.
+    val tier = chain.firstOrNull { tiers.has(it) && hasUsableGate(tiers, it) }
+      ?: throw IOException(
+        "no usable models published for any of ${chain.joinToString(", ")} — a tier must " +
+          "ship ${ModelPaths.GATE.joinToString(" or ")} for the content gate to run"
+      )
 
     val files = tiers.getJSONObject(tier).getJSONArray("files")
     return ModelManifest(
@@ -124,8 +138,41 @@ object ModelDownload {
           throw IOException("manifest for $tier names an unacceptable file: '$name'")
         }
         ModelFile(name, o.getLong("bytes"), o.getString("sha256"))
-      },
+      }
+        // Only what `Pipeline::init` actually opens -- see [ModelPaths.OPENED_BY_PIPELINE].
+        // Filtered here, at the one place the manifest is read, so the byte totals, the
+        // progress events, `notPresent` and the log line below all agree about what this
+        // run is for. Filtering later would have the progress bar counting files nothing
+        // fetches.
+        .filter { isOpenedByPipeline(it.name, tier) },
     )
+  }
+
+  /**
+   * Whether [tier]'s published file list includes a content gate the native layer opens.
+   *
+   * A tier without one cannot start at all — see the call site in [manifestFor] — so this
+   * is a precondition for choosing a tier, not a detail of what to download from it.
+   */
+  private fun hasUsableGate(tiers: org.json.JSONObject, tier: String): Boolean {
+    val files = tiers.getJSONObject(tier).optJSONArray("files") ?: return false
+    val names = (0 until files.length()).map { files.getJSONObject(it).optString("name") }
+    return ModelPaths.GATE.any { "${it}_$tier.bin" in names }
+  }
+
+  /**
+   * Whether `name` is one of the models the native pipeline opens, for this [tier].
+   *
+   * Manifest names are `<base>_<tier>.bin`, so the tier suffix is stripped and the base
+   * checked against [ModelPaths.OPENED_BY_PIPELINE]. A file for a *different* tier would
+   * not match and is skipped, which is correct — the manifest only lists one tier's files
+   * per tier object, but being explicit costs nothing and makes a malformed manifest
+   * under-fetch rather than fetch the wrong tier's 206 MB swapper.
+   */
+  private fun isOpenedByPipeline(name: String, tier: String): Boolean {
+    val suffix = "_$tier.bin"
+    if (!name.endsWith(suffix)) return false
+    return name.removeSuffix(suffix) in ModelPaths.OPENED_BY_PIPELINE
   }
 
   /**

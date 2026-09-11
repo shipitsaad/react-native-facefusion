@@ -82,11 +82,14 @@ object SourceFaces {
   }
 
   // Duplicated from PhotoSwap rather than shared — see that file's note on the same choice.
-  private fun decode(path: String): Bitmap {
-    val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-    return BitmapFactory.decodeFile(path, options)
-      ?: throw IllegalArgumentException("Could not decode image: $path")
-  }
+  /**
+   * Capped at [BitmapDecode.SOURCE_MAX] — **the same cap [PhotoSwap] decodes the source
+   * with, and that is load-bearing.** The boxes this returns are in the decoded image's
+   * pixel coordinates and come back as `SwapOptions.sourceFaceBox`; if the two paths
+   * decoded at different scales, a picked face would crop the wrong region.
+   */
+  private fun decode(path: String): Bitmap =
+    BitmapDecode.decode(path, BitmapDecode.SOURCE_MAX)
 
   private fun pixelsOf(bitmap: Bitmap): IntArray {
     val pixels = IntArray(bitmap.width * bitmap.height)

@@ -52,9 +52,16 @@ object TargetFaces {
    *  loop presents to `processFrame`, which is what makes a box detected here line up with
    *  what that loop sees per frame, with no rotation math needed on this side at all. */
   private fun decode(path: String): Bitmap {
-    val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-    BitmapFactory.decodeFile(path, options)?.let { return it }
+    // Capped at [BitmapDecode.TARGET_MAX] -- the same cap [PhotoSwap] decodes a photo
+    // target with, which is what keeps a box picked here aligned with what the swap
+    // actually crops. `decodeOrNull`, not `decode`, because "not a still image" is how the
+    // video branch below is reached.
+    BitmapDecode.decodeOrNull(path, BitmapDecode.TARGET_MAX)?.let { return it }
 
+    // A video frame arrives at the clip's own resolution, uncapped -- and deliberately so:
+    // VideoSwap's loop processes frames at that resolution too, so capping here would
+    // misalign every box against the frames the swap actually sees. Codec limits keep this
+    // bounded in practice where a photo's megapixels are not.
     val retriever = MediaMetadataRetriever()
     try {
       retriever.setDataSource(path)

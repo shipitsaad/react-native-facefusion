@@ -58,9 +58,13 @@ object PhotoSwap {
       )
     }
 
-    val decodedSource = decode(sourcePath)
+    // Capped during decode -- see [BitmapDecode] for why, and why the source's cap is
+    // lower than the target's. `sourceFaceBox` is in the source's ORIGINAL pixel
+    // coordinates (it came from SourceFaces.detect on the same path, decoded with the same
+    // cap), so the crop below stays consistent with it.
+    val decodedSource = BitmapDecode.decode(sourcePath, BitmapDecode.SOURCE_MAX)
     val source = sourceFaceBox?.let { SourceFaces.cropToFace(decodedSource, it) } ?: decodedSource
-    val target = decode(targetPath)
+    val target = BitmapDecode.decode(targetPath, BitmapDecode.TARGET_MAX)
 
     return PipeGuard.run(context, tier, cfg) {
       val sourceBgr = NativePipe.argbToBgr(pixelsOf(source), source.width, source.height)
@@ -98,15 +102,6 @@ object PhotoSwap {
 
       PhotoSwapResult(outputPath, faceCount, tier)
     }
-  }
-
-  // ARGB_8888 forced explicitly: BitmapFactory defaults to software ARGB_8888 for
-  // decodeFile already, but leaving it implicit invites a HARDWARE bitmap the moment
-  // someone "helpfully" switches this to ImageDecoder later -- getPixels() throws on that.
-  private fun decode(path: String): Bitmap {
-    val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-    return BitmapFactory.decodeFile(path, options)
-      ?: throw IllegalArgumentException("Could not decode image: $path")
   }
 
   private fun pixelsOf(bitmap: Bitmap): IntArray {

@@ -25,8 +25,40 @@ object ModelPaths {
    */
   private val REQUIRED = listOf("yoloface", "fan2d", "arcface", SWAPPER)
 
-  /** The content gate, in the native layer's preference order: fp32 first, quantised second. */
-  private val GATE = listOf("nsfw", "nsfwq")
+  /**
+   * The content gate, in the native layer's preference order: fp32 first, quantised second.
+   *
+   * These two names exactly — `Pipeline::init` tries `nsfw_<tier>` then `nsfwq_<tier>` and
+   * treats neither being present as a fatal init error, by design, because a gate that
+   * silently does not run is worse than no gate. Anything else the manifest may publish
+   * (`nsfwq2`) is not opened, so it does not count as a gate here no matter how much it
+   * looks like one. See [ModelDownload.manifestFor], which refuses a tier on this basis.
+   */
+  val GATE = listOf("nsfw", "nsfwq")
+
+  /**
+   * Every model `Pipeline::init` actually opens — the download allowlist.
+   *
+   * **This exists because the manifest lists more than the pipeline uses.** As of
+   * 2026-09-11 upstream publishes `wav2lip` (43.73 MB) and `edtalk` (60.37 MB) for
+   * lip-sync work this port does not do, plus `nsfwq2` (~6.6 MB) on the lower tiers that
+   * `Pipeline::init` never reaches because it tries `nsfw_` then `nsfwq_` and stops. That
+   * was **104 MB of every user's first run spent on files nothing opens.**
+   *
+   * This reverses an earlier deliberate stance (`docs/04-models.md`: "we fetch exactly
+   * what the manifest lists and staying in lockstep with upstream is worth more than
+   * 6.6 MB"). That reasoning held at 6.6 MB. It does not hold at 104 MB on a mobile
+   * connection, which is a quarter of the download.
+   *
+   * `fan685` is here even though no tier currently publishes it: `Pipeline::init` opens it
+   * optionally and falls back to geometry when absent, so it should be fetched the day it
+   * appears rather than needing a code change to notice.
+   *
+   * The cost of an allowlist is that a genuinely new *required* model would be skipped
+   * until this list learns about it — which surfaces as `init` failing by name
+   * ("no content gate: neither ..."), loudly, not as a silent wrong answer.
+   */
+  val OPENED_BY_PIPELINE: List<String> = REQUIRED + GATE + listOf("gpen", "fan685")
 
   /**
    * The models directory, created by us.

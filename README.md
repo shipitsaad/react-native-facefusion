@@ -162,11 +162,12 @@ Known limits of this port, stated plainly rather than hidden:
 
 ## Known issues
 
-- **Very high-resolution target photos can crash with `OutOfMemoryError`.** Face
-  detection and the swap itself convert the whole decoded image to a packed byte
-  array before any cropping happens. A typical phone-camera photo is well under the
-  ceiling that triggers this; a multi-thousand-pixel press photo is not. Not yet
-  fixed — needs a decode-time max-dimension downscale.
+- **A photo swap's output is capped at 2560 px on the long edge** (and a source photo
+  is subsampled to 1920, which costs nothing — it only contributes an identity, never
+  output pixels). This is deliberate: the pipeline holds roughly 19 bytes per pixel at
+  once, so an uncapped 50 MP photo — the main camera on the phones this library
+  requires — needs ~950 MB and cannot run at all. Videos are unaffected; they process
+  at the clip's own resolution.
 - **The content gate's true-positive path is unverified.** Every test swap run
   against real hardware so far has been clean content, which only confirms clean
   content isn't wrongly flagged.
