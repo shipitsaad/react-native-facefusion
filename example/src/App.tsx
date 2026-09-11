@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  LayoutAnimation,
+  Modal,
   NativeModules,
   PermissionsAndroid,
   Platform,
@@ -79,8 +81,18 @@ async function pickMedia(kind: 'image' | 'video'): Promise<string | null> {
   }
 }
 
+function toUri(path: string): string {
+  if (!path) return '';
+  return path.startsWith('file://') || path.startsWith('content://')
+    ? path
+    : `file://${path}`;
+}
+
 export default function App() {
-  const [tab, setTab] = useState<'swap' | 'status'>('swap');
+  const [swapMode, setSwapMode] = useState<'photo' | 'video'>('photo');
+  const [showPaths, setShowPaths] = useState(false);
+  const [showOptionsSheet, setShowOptionsSheet] = useState(false);
+  const [showDeviceSheet, setShowDeviceSheet] = useState(false);
 
   // Probe & Models state
   const [probe, setProbe] = useState<DeviceProbeResult | null>(null);
@@ -166,7 +178,6 @@ export default function App() {
   // (SwapConfig.kt, ffpipe::Config) and was already accepted by swapPhoto()/swapVideo();
   // this is the first UI for any of them. Defaults match SwapConfig's own Kotlin defaults.
   // Shared between the photo and video cards below, since both take the same SwapOptions.
-  const [optionsExpanded, setOptionsExpanded] = useState(false);
   const [swapperWeight, setSwapperWeight] = useState(0.5);
   const [maskBlur, setMaskBlur] = useState(0.3);
   const [maskPadding, setMaskPadding] = useState(0); // one uniform value, all 4 sides
@@ -176,6 +187,11 @@ export default function App() {
   const [largestFaceOnly, setLargestFaceOnly] = useState(false);
   const [faceEnhance, setFaceEnhance] = useState(false);
   const [faceEnhancerBlend, setFaceEnhancerBlend] = useState(0.8);
+
+  const toggleFaceEnhance = useCallback((value: boolean) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFaceEnhance(value);
+  }, []);
 
   const selectedFace =
     selectedFaceIndex != null ? sourceFaces[selectedFaceIndex] : undefined;
@@ -421,9 +437,9 @@ export default function App() {
   const videoBlocker = !isReady
     ? 'Download the models first — see Device & Models.'
     : sourcePath.trim() === ''
-      ? 'Choose a source face in the Photo card above.'
+      ? 'Choose a source face in step 1.'
       : videoTargetPath.trim() === ''
-        ? 'Choose a target clip.'
+        ? 'Choose a target video in step 2.'
         : null;
 
   return (
@@ -440,53 +456,30 @@ export default function App() {
           <Text style={styles.appTitle}>FaceFusion</Text>
           <Text style={styles.appSub}>Qualcomm Hexagon NPU</Text>
         </View>
-        <View
-          style={[
-            styles.statusBadge,
-            isReady ? styles.badgeReady : styles.badgePending,
-          ]}
-        >
-          <Text
+        <View style={styles.topBarRight}>
+          <TouchableOpacity
+            style={styles.deviceButton}
+            onPress={() => setShowDeviceSheet(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.deviceButtonText}>Device & Models</Text>
+          </TouchableOpacity>
+          <View
             style={[
-              styles.statusBadgeText,
-              isReady ? styles.textReady : styles.textPending,
+              styles.statusBadge,
+              isReady ? styles.badgeReady : styles.badgePending,
             ]}
           >
-            {isReady ? 'Ready' : 'No Models'}
-          </Text>
+            <Text
+              style={[
+                styles.statusBadgeText,
+                isReady ? styles.textReady : styles.textPending,
+              ]}
+            >
+              {isReady ? 'Ready' : 'No Models'}
+            </Text>
+          </View>
         </View>
-      </View>
-
-      {/* Segmented Switcher */}
-      <View style={styles.segmentContainer}>
-        <TouchableOpacity
-          style={[styles.segment, tab === 'swap' && styles.segmentActive]}
-          onPress={() => setTab('swap')}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              tab === 'swap' && styles.segmentTextActive,
-            ]}
-          >
-            Swap
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.segment, tab === 'status' && styles.segmentActive]}
-          onPress={() => setTab('status')}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              tab === 'status' && styles.segmentTextActive,
-            ]}
-          >
-            Device & Models
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* Main Content */}
@@ -496,609 +489,1120 @@ export default function App() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {tab === 'swap' ? (
-          /* ================= SWAP VIEW ================= */
-          <View style={styles.tabPane}>
-            {!isReady && (
-              <TouchableOpacity
-                style={styles.noticeBar}
-                onPress={() => setTab('status')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.noticeText}>
-                  Models not downloaded. Tap here to download.
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Photo</Text>
-              <Text style={styles.hint}>
-                The face from step 1 replaces the face in step 2.
+        <View style={styles.tabPane}>
+          {!isReady && (
+            <TouchableOpacity
+              style={styles.noticeBar}
+              onPress={() => setShowDeviceSheet(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.noticeText}>
+                Models not downloaded. Tap here to manage models.
               </Text>
+            </TouchableOpacity>
+          )}
 
-              <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>
-                  <Text style={styles.stepNumber}>1</Text> Source face
-                </Text>
-                <TouchableOpacity onPress={pickSource}>
-                  <Text style={styles.pickLink}>Choose photo…</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={styles.input}
-                value={sourcePath}
-                onChangeText={setSourcePath}
-                placeholder="Tap “Choose photo…” — the face to copy from"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-
-              {/* ===== Source face picker — which face is the identity, when the
-                  source photo has more than one. See ADR-0012. ===== */}
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={detectFaces}
-                disabled={detectingFaces || !isReady}
-              >
-                {detectingFaces ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>
-                    Detect Faces in Source
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {detectError != null && (
-                <Text style={styles.errorText}>{detectError}</Text>
-              )}
-
-              {sourceFaces.length > 0 && (
-                <View style={styles.faceList}>
-                  <TouchableOpacity
-                    style={[
-                      styles.facePill,
-                      selectedFaceIndex === null && styles.facePillSelected,
-                    ]}
-                    onPress={() => setSelectedFaceIndex(null)}
-                  >
-                    <Text style={styles.facePillText}>Largest (default)</Text>
-                  </TouchableOpacity>
-                  {sourceFaces.map((face, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={[
-                        styles.facePill,
-                        selectedFaceIndex === i && styles.facePillSelected,
-                      ]}
-                      onPress={() => setSelectedFaceIndex(i)}
-                    >
-                      <Text style={styles.facePillText}>
-                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>
-                  <Text style={styles.stepNumber}>2</Text> Target photo
-                </Text>
-                <TouchableOpacity onPress={pickTarget}>
-                  <Text style={styles.pickLink}>Choose photo…</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={styles.input}
-                value={targetPath}
-                onChangeText={setTargetPath}
-                placeholder="Tap “Choose photo…” — the photo to change"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-
-              {/* ===== Target face picker — which face in targetPath actually gets
-                  swapped, when it has more than one. See ADR-0014. ===== */}
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={detectTargetFacesForPhoto}
-                disabled={detectingTargetFaces || !isReady}
-              >
-                {detectingTargetFaces ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>
-                    Detect Faces in Target
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {detectTargetError != null && (
-                <Text style={styles.errorText}>{detectTargetError}</Text>
-              )}
-
-              {targetFaces.length > 0 && (
-                <View style={styles.faceList}>
-                  <TouchableOpacity
-                    style={[
-                      styles.facePill,
-                      selectedTargetFaceIndex === null &&
-                        styles.facePillSelected,
-                    ]}
-                    onPress={() => setSelectedTargetFaceIndex(null)}
-                  >
-                    <Text style={styles.facePillText}>
-                      Every face (default)
-                    </Text>
-                  </TouchableOpacity>
-                  {targetFaces.map((face, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={[
-                        styles.facePill,
-                        selectedTargetFaceIndex === i &&
-                          styles.facePillSelected,
-                      ]}
-                      onPress={() => setSelectedTargetFaceIndex(i)}
-                    >
-                      <Text style={styles.facePillText}>
-                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              <Text style={styles.inputLabel}>Output file</Text>
-              <TextInput
-                style={styles.input}
-                value={outputPath}
-                onChangeText={setOutputPath}
-                placeholder="where to write the result"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-
-              <TouchableOpacity
+          {/* Mode Switcher: Photo vs Video */}
+          <View style={styles.swapModeBar}>
+            <TouchableOpacity
+              style={[
+                styles.modeTab,
+                swapMode === 'photo' && styles.modeTabActive,
+              ]}
+              onPress={() => setSwapMode('photo')}
+              activeOpacity={0.7}
+            >
+              <Text
                 style={[
-                  styles.primaryButton,
-                  (swapping || photoBlocker != null) && styles.buttonDisabled,
+                  styles.modeTabText,
+                  swapMode === 'photo' && styles.modeTabTextActive,
                 ]}
-                onPress={swap}
-                disabled={swapping || photoBlocker != null}
-                activeOpacity={0.8}
               >
-                {swapping ? (
-                  <ActivityIndicator size="small" color="#000000" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>
-                    <Text style={styles.stepNumber}>3</Text> Run Swap
-                  </Text>
-                )}
-              </TouchableOpacity>
+                Photo Swap
+              </Text>
+              {swapping && <View style={styles.runningBadge} />}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.modeTab,
+                swapMode === 'video' && styles.modeTabActive,
+              ]}
+              onPress={() => setSwapMode('video')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.modeTabText,
+                  swapMode === 'video' && styles.modeTabTextActive,
+                ]}
+              >
+                Video Swap
+              </Text>
+              {videoSwapping && <View style={styles.runningBadge} />}
+            </TouchableOpacity>
+          </View>
 
-              {photoBlocker != null && !swapping && (
-                <Text style={styles.blockerText}>{photoBlocker}</Text>
-              )}
-            </View>
-
-            {/* Live Preview -- the swapped frame, drawn natively straight into this view's
-                own Surface (PreviewSurfaceHolder.kt) the moment PhotoSwap has it, no pixels
-                over the bridge. */}
-            {swapping && (
+          {swapMode === 'photo' ? (
+            /* ============= PHOTO SWAP VIEW ============= */
+            <>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Live Preview</Text>
-                <View style={styles.previewContainer}>
-                  <FacefusionPreview style={styles.previewImage} />
-                </View>
-              </View>
-            )}
-
-            {swapError != null && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{swapError}</Text>
-              </View>
-            )}
-
-            {swapResult != null && (
-              <View style={styles.card}>
-                <View style={styles.resultMetaRow}>
-                  <Text style={styles.resultMetaText}>
-                    Faces:{' '}
-                    <Text style={styles.resultBold}>
-                      {swapResult.faceCount}
-                    </Text>
-                  </Text>
-                  <Text style={styles.resultMetaText}>
-                    Tier:{' '}
-                    <Text style={styles.resultBold}>{swapResult.tier}</Text>
+                <View style={styles.boxHeader}>
+                  <View style={styles.boxTitleRow}>
+                    <Text style={styles.boxTitle}>Photo Swap</Text>
+                    <View style={styles.badgeTag}>
+                      <Text style={styles.badgeTagText}>SINGLE IMAGE</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.hint}>
+                    The face from step 1 replaces the face in step 2.
                   </Text>
                 </View>
-                <Text
-                  style={styles.resultPathText}
-                  numberOfLines={1}
-                  ellipsizeMode="middle"
+
+                {/* Dual Media Preview Row (Side-by-Side) */}
+                <View style={styles.dualMediaRow}>
+                  {/* Source Media Column (Step 1) */}
+                  <View style={styles.mediaCol}>
+                    <View style={styles.stepHeaderRow}>
+                      <View style={styles.stepTitleGroup}>
+                        <View style={styles.stepBadge}>
+                          <Text style={styles.stepBadgeNumber}>1</Text>
+                        </View>
+                        <Text style={styles.stepTitle}>Source Face</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.mediaSlot}
+                      onPress={pickSource}
+                      activeOpacity={0.8}
+                    >
+                      {sourcePath ? (
+                        <>
+                          <Image
+                            source={{ uri: toUri(sourcePath) }}
+                            style={styles.mediaImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.changeOverlay}>
+                            <Text style={styles.changeOverlayText}>Change</Text>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={styles.placeholderBox}>
+                          <View style={styles.placeholderIconCircle}>
+                            <Text style={styles.placeholderPlus}>+</Text>
+                          </View>
+                          <Text style={styles.placeholderMain}>
+                            Source Face
+                          </Text>
+                          <Text style={styles.placeholderSub}>
+                            Tap to choose
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Detect Faces Button */}
+                    <TouchableOpacity
+                      style={styles.compactDetectButton}
+                      onPress={detectFaces}
+                      disabled={detectingFaces || !isReady || !sourcePath}
+                      activeOpacity={0.7}
+                    >
+                      {detectingFaces ? (
+                        <ActivityIndicator size="small" color="#0a84ff" />
+                      ) : (
+                        <Text style={styles.compactDetectButtonText}>
+                          Detect Faces
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {detectError != null && (
+                      <View style={styles.compactErrorBox}>
+                        <Text style={styles.compactErrorText}>
+                          {detectError}
+                        </Text>
+                      </View>
+                    )}
+
+                    {sourceFaces.length > 0 && (
+                      <View style={styles.facePillWrap}>
+                        <TouchableOpacity
+                          style={[
+                            styles.facePillCompact,
+                            selectedFaceIndex === null &&
+                              styles.facePillSelected,
+                          ]}
+                          onPress={() => setSelectedFaceIndex(null)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.facePillTextCompact,
+                              selectedFaceIndex === null &&
+                                styles.facePillTextSelected,
+                            ]}
+                          >
+                            Largest
+                          </Text>
+                        </TouchableOpacity>
+                        {sourceFaces.map((face, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            style={[
+                              styles.facePillCompact,
+                              selectedFaceIndex === i &&
+                                styles.facePillSelected,
+                            ]}
+                            onPress={() => setSelectedFaceIndex(i)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.facePillTextCompact,
+                                selectedFaceIndex === i &&
+                                  styles.facePillTextSelected,
+                              ]}
+                            >
+                              F{i + 1} ({(face.score * 100).toFixed(0)}%)
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Arrow Divider */}
+                  <View style={styles.arrowCol}>
+                    <View style={styles.arrowBadge}>
+                      <Text style={styles.arrowChar}>TO</Text>
+                    </View>
+                  </View>
+
+                  {/* Target Media Column (Step 2) */}
+                  <View style={styles.mediaCol}>
+                    <View style={styles.stepHeaderRow}>
+                      <View style={styles.stepTitleGroup}>
+                        <View style={styles.stepBadge}>
+                          <Text style={styles.stepBadgeNumber}>2</Text>
+                        </View>
+                        <Text style={styles.stepTitle}>Target Photo</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.mediaSlot}
+                      onPress={pickTarget}
+                      activeOpacity={0.8}
+                    >
+                      {targetPath ? (
+                        <>
+                          <Image
+                            source={{ uri: toUri(targetPath) }}
+                            style={styles.mediaImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.changeOverlay}>
+                            <Text style={styles.changeOverlayText}>Change</Text>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={styles.placeholderBox}>
+                          <View style={styles.placeholderIconCircle}>
+                            <Text style={styles.placeholderPlus}>+</Text>
+                          </View>
+                          <Text style={styles.placeholderMain}>
+                            Target Photo
+                          </Text>
+                          <Text style={styles.placeholderSub}>
+                            Tap to choose
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Detect Faces Button */}
+                    <TouchableOpacity
+                      style={styles.compactDetectButton}
+                      onPress={detectTargetFacesForPhoto}
+                      disabled={detectingTargetFaces || !isReady || !targetPath}
+                      activeOpacity={0.7}
+                    >
+                      {detectingTargetFaces ? (
+                        <ActivityIndicator size="small" color="#0a84ff" />
+                      ) : (
+                        <Text style={styles.compactDetectButtonText}>
+                          Detect Faces
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {detectTargetError != null && (
+                      <View style={styles.compactErrorBox}>
+                        <Text style={styles.compactErrorText}>
+                          {detectTargetError}
+                        </Text>
+                      </View>
+                    )}
+
+                    {targetFaces.length > 0 && (
+                      <View style={styles.facePillWrap}>
+                        <TouchableOpacity
+                          style={[
+                            styles.facePillCompact,
+                            selectedTargetFaceIndex === null &&
+                              styles.facePillSelected,
+                          ]}
+                          onPress={() => setSelectedTargetFaceIndex(null)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.facePillTextCompact,
+                              selectedTargetFaceIndex === null &&
+                                styles.facePillTextSelected,
+                            ]}
+                          >
+                            All
+                          </Text>
+                        </TouchableOpacity>
+                        {targetFaces.map((face, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            style={[
+                              styles.facePillCompact,
+                              selectedTargetFaceIndex === i &&
+                                styles.facePillSelected,
+                            ]}
+                            onPress={() => setSelectedTargetFaceIndex(i)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.facePillTextCompact,
+                                selectedTargetFaceIndex === i &&
+                                  styles.facePillTextSelected,
+                              ]}
+                            >
+                              F{i + 1} ({(face.score * 100).toFixed(0)}%)
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Collapsible custom path options */}
+                <TouchableOpacity
+                  style={styles.pathsToggle}
+                  onPress={() => setShowPaths((v) => !v)}
+                  activeOpacity={0.7}
                 >
-                  {swapResult.outputPath}
-                </Text>
+                  <Text style={styles.pathsToggleText}>
+                    {showPaths ? 'Hide file paths' : 'Show file paths'}
+                  </Text>
+                </TouchableOpacity>
 
-                <View style={styles.previewContainer}>
-                  <Image
-                    style={styles.previewImage}
-                    source={{ uri: `file://${swapResult.outputPath}` }}
-                    resizeMode="contain"
+                {showPaths && (
+                  <View style={styles.pathsContainer}>
+                    <Text style={styles.inputLabel}>Source Path</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={sourcePath}
+                      onChangeText={setSourcePath}
+                      placeholder="Source path"
+                      placeholderTextColor="#636366"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Text style={styles.inputLabel}>Target Path</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={targetPath}
+                      onChangeText={setTargetPath}
+                      placeholder="Target path"
+                      placeholderTextColor="#636366"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Text style={styles.inputLabel}>Output Path</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={outputPath}
+                      onChangeText={setOutputPath}
+                      placeholder="where to write the result"
+                      placeholderTextColor="#636366"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                )}
+
+                {/* Step 3: Run Swap Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    (swapping || photoBlocker != null) && styles.buttonDisabled,
+                  ]}
+                  onPress={swap}
+                  disabled={swapping || photoBlocker != null}
+                  activeOpacity={0.8}
+                >
+                  {swapping ? (
+                    <ActivityIndicator size="small" color="#000000" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>3 Run Swap</Text>
+                  )}
+                </TouchableOpacity>
+
+                {photoBlocker != null && !swapping && (
+                  <View style={styles.blockerCard}>
+                    <Text style={styles.blockerText}>{photoBlocker}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Live Preview */}
+              {swapping && (
+                <View style={styles.card}>
+                  <View style={styles.previewHeaderRow}>
+                    <Text style={styles.cardTitle}>Live Preview</Text>
+                    <View style={styles.liveIndicator}>
+                      <View style={styles.liveDot} />
+                      <Text style={styles.liveText}>PROCESSING</Text>
+                    </View>
+                  </View>
+                  <View style={styles.previewContainer}>
+                    <FacefusionPreview style={styles.previewImage} />
+                  </View>
+                </View>
+              )}
+
+              {swapError != null && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{swapError}</Text>
+                </View>
+              )}
+
+              {swapResult != null && (
+                <View style={styles.card}>
+                  <View style={styles.resultCardHeader}>
+                    <Text style={styles.resultTitle}>Photo Result</Text>
+                    <View style={styles.resultSuccessBadge}>
+                      <Text style={styles.resultSuccessBadgeText}>Ready</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.resultMetaRow}>
+                    <View style={styles.resultChip}>
+                      <Text style={styles.resultMetaText}>
+                        Faces:{' '}
+                        <Text style={styles.resultBold}>
+                          {swapResult.faceCount}
+                        </Text>
+                      </Text>
+                    </View>
+                    <View style={styles.resultChip}>
+                      <Text style={styles.resultMetaText}>
+                        Tier:{' '}
+                        <Text style={styles.resultBold}>{swapResult.tier}</Text>
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.pathChip}>
+                    <Text
+                      style={styles.resultPathText}
+                      numberOfLines={1}
+                      ellipsizeMode="middle"
+                    >
+                      {swapResult.outputPath}
+                    </Text>
+                  </View>
+
+                  <View style={styles.previewContainer}>
+                    <Image
+                      style={styles.previewImage}
+                      source={{ uri: toUri(swapResult.outputPath) }}
+                      resizeMode="contain"
+                    />
+                  </View>
+
+                  {/* Copies outputPath into MediaStore */}
+                  <TouchableOpacity
+                    style={styles.saveButton}
+                    onPress={saveSwapToGallery}
+                    disabled={savingPhoto}
+                    activeOpacity={0.7}
+                  >
+                    {savingPhoto ? (
+                      <ActivityIndicator size="small" color="#34c759" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save to Gallery</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  {savedPhotoUri != null && (
+                    <View style={styles.savedSuccessBox}>
+                      <Text
+                        style={styles.savedSuccessText}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        Saved: {savedPhotoUri}
+                      </Text>
+                    </View>
+                  )}
+                  {savePhotoError != null && (
+                    <Text style={styles.errorText}>{savePhotoError}</Text>
+                  )}
+                </View>
+              )}
+            </>
+          ) : (
+            /* ============= VIDEO SWAP VIEW ============= */
+            <>
+              <View style={styles.card}>
+                <View style={styles.boxHeader}>
+                  <View style={styles.boxTitleRow}>
+                    <Text style={styles.boxTitle}>Video Swap</Text>
+                    <View style={styles.badgeTag}>
+                      <Text style={styles.badgeTagText}>VIDEO CLIP</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.hint}>
+                    Swap source face into target video frames.
+                  </Text>
+                </View>
+
+                {/* Side-by-side Dual Media Preview & Selection */}
+                <View style={styles.dualMediaRow}>
+                  {/* Source Media Column (Step 1) */}
+                  <View style={styles.mediaCol}>
+                    <View style={styles.stepHeaderRow}>
+                      <View style={styles.stepTitleGroup}>
+                        <View style={styles.stepBadge}>
+                          <Text style={styles.stepBadgeNumber}>1</Text>
+                        </View>
+                        <Text style={styles.stepTitle}>Source Face</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.mediaSlot}
+                      onPress={pickSource}
+                      activeOpacity={0.8}
+                    >
+                      {sourcePath ? (
+                        <>
+                          <Image
+                            source={{ uri: toUri(sourcePath) }}
+                            style={styles.mediaImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.changeOverlay}>
+                            <Text style={styles.changeOverlayText}>Change</Text>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={styles.placeholderBox}>
+                          <View style={styles.placeholderIconCircle}>
+                            <Text style={styles.placeholderPlus}>+</Text>
+                          </View>
+                          <Text style={styles.placeholderMain}>
+                            Source Face
+                          </Text>
+                          <Text style={styles.placeholderSub}>
+                            Tap to choose
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Detect Faces Button */}
+                    <TouchableOpacity
+                      style={styles.compactDetectButton}
+                      onPress={detectFaces}
+                      disabled={detectingFaces || !isReady || !sourcePath}
+                      activeOpacity={0.7}
+                    >
+                      {detectingFaces ? (
+                        <ActivityIndicator size="small" color="#0a84ff" />
+                      ) : (
+                        <Text style={styles.compactDetectButtonText}>
+                          Detect Faces
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {detectError != null && (
+                      <View style={styles.compactErrorBox}>
+                        <Text style={styles.compactErrorText}>
+                          {detectError}
+                        </Text>
+                      </View>
+                    )}
+
+                    {sourceFaces.length > 0 && (
+                      <View style={styles.facePillWrap}>
+                        <TouchableOpacity
+                          style={[
+                            styles.facePillCompact,
+                            selectedFaceIndex === null &&
+                              styles.facePillSelected,
+                          ]}
+                          onPress={() => setSelectedFaceIndex(null)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.facePillTextCompact,
+                              selectedFaceIndex === null &&
+                                styles.facePillTextSelected,
+                            ]}
+                          >
+                            Largest
+                          </Text>
+                        </TouchableOpacity>
+                        {sourceFaces.map((face, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            style={[
+                              styles.facePillCompact,
+                              selectedFaceIndex === i &&
+                                styles.facePillSelected,
+                            ]}
+                            onPress={() => setSelectedFaceIndex(i)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.facePillTextCompact,
+                                selectedFaceIndex === i &&
+                                  styles.facePillTextSelected,
+                              ]}
+                            >
+                              F{i + 1} ({(face.score * 100).toFixed(0)}%)
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Arrow Divider */}
+                  <View style={styles.arrowCol}>
+                    <View style={styles.arrowBadge}>
+                      <Text style={styles.arrowChar}>TO</Text>
+                    </View>
+                  </View>
+
+                  {/* Target Video Column (Step 2) */}
+                  <View style={styles.mediaCol}>
+                    <View style={styles.stepHeaderRow}>
+                      <View style={styles.stepTitleGroup}>
+                        <View style={styles.stepBadge}>
+                          <Text style={styles.stepBadgeNumber}>2</Text>
+                        </View>
+                        <Text style={styles.stepTitle}>Target Video</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.mediaSlot}
+                      onPress={pickVideoTarget}
+                      activeOpacity={0.8}
+                    >
+                      {videoTargetPath ? (
+                        <View style={styles.videoSlotActive}>
+                          <View style={styles.videoTagBadge}>
+                            <Text style={styles.videoTagText}>VIDEO</Text>
+                          </View>
+                          <Text
+                            style={styles.videoCompactFileName}
+                            numberOfLines={2}
+                            ellipsizeMode="middle"
+                          >
+                            {videoTargetPath.split('/').pop() ||
+                              videoTargetPath}
+                          </Text>
+                          <View style={styles.changeOverlay}>
+                            <Text style={styles.changeOverlayText}>Change</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={styles.placeholderBox}>
+                          <View style={styles.placeholderIconCircle}>
+                            <Text style={styles.placeholderPlus}>+</Text>
+                          </View>
+                          <Text style={styles.placeholderMain}>
+                            Target Video
+                          </Text>
+                          <Text style={styles.placeholderSub}>
+                            Tap to choose
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Detect Faces in Video Button */}
+                    <TouchableOpacity
+                      style={styles.compactDetectButton}
+                      onPress={detectTargetFacesForVideo}
+                      disabled={
+                        detectingVideoTargetFaces ||
+                        !isReady ||
+                        !videoTargetPath
+                      }
+                      activeOpacity={0.7}
+                    >
+                      {detectingVideoTargetFaces ? (
+                        <ActivityIndicator size="small" color="#0a84ff" />
+                      ) : (
+                        <Text style={styles.compactDetectButtonText}>
+                          Detect Faces
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {detectVideoTargetError != null && (
+                      <View style={styles.compactErrorBox}>
+                        <Text style={styles.compactErrorText}>
+                          {detectVideoTargetError}
+                        </Text>
+                      </View>
+                    )}
+
+                    {videoTargetFaces.length > 0 && (
+                      <View style={styles.facePillWrap}>
+                        <TouchableOpacity
+                          style={[
+                            styles.facePillCompact,
+                            selectedVideoTargetFaceIndex === null &&
+                              styles.facePillSelected,
+                          ]}
+                          onPress={() => setSelectedVideoTargetFaceIndex(null)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.facePillTextCompact,
+                              selectedVideoTargetFaceIndex === null &&
+                                styles.facePillTextSelected,
+                            ]}
+                          >
+                            All
+                          </Text>
+                        </TouchableOpacity>
+                        {videoTargetFaces.map((face, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            style={[
+                              styles.facePillCompact,
+                              selectedVideoTargetFaceIndex === i &&
+                                styles.facePillSelected,
+                            ]}
+                            onPress={() => setSelectedVideoTargetFaceIndex(i)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.facePillTextCompact,
+                                selectedVideoTargetFaceIndex === i &&
+                                  styles.facePillTextSelected,
+                              ]}
+                            >
+                              F{i + 1} ({(face.score * 100).toFixed(0)}%)
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Compact FPS row */}
+                <View style={styles.compactFpsRow}>
+                  <View style={styles.compactFpsLeft}>
+                    <Text style={styles.compactFpsLabel}>Cap FPS</Text>
+                    {fpsCapEnabled && (
+                      <View style={styles.fpsStepperInline}>
+                        <TouchableOpacity
+                          style={styles.fpsMiniBtn}
+                          onPress={() =>
+                            setTargetFpsValue((v) => Math.max(1, v - 1))
+                          }
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.fpsMiniBtnText}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.fpsValueText}>
+                          {targetFpsValue} fps
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.fpsMiniBtn}
+                          onPress={() =>
+                            setTargetFpsValue((v) => Math.min(30, v + 1))
+                          }
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.fpsMiniBtnText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                  <Switch
+                    value={fpsCapEnabled}
+                    onValueChange={(v) => {
+                      LayoutAnimation.configureNext(
+                        LayoutAnimation.Presets.easeInEaseOut
+                      );
+                      setFpsCapEnabled(v);
+                    }}
+                    trackColor={{ false: '#3a3a3c', true: '#34c759' }}
+                    thumbColor="#ffffff"
                   />
                 </View>
 
-                {/* Copies outputPath (this app's own private storage) into MediaStore, so
-                    it shows up in the Photos app and survives an uninstall. */}
+                {/* Collapsible custom path options */}
                 <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={saveSwapToGallery}
-                  disabled={savingPhoto}
+                  style={styles.pathsToggle}
+                  onPress={() => setShowPaths((v) => !v)}
+                  activeOpacity={0.7}
                 >
-                  {savingPhoto ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Text style={styles.secondaryButtonText}>
-                      Save to Gallery
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                {savedPhotoUri != null && (
-                  <Text
-                    style={styles.resultPathText}
-                    numberOfLines={1}
-                    ellipsizeMode="middle"
-                  >
-                    Saved: {savedPhotoUri}
+                  <Text style={styles.pathsToggleText}>
+                    {showPaths ? 'Hide file paths' : 'Show file paths'}
                   </Text>
-                )}
-                {savePhotoError != null && (
-                  <Text style={styles.errorText}>{savePhotoError}</Text>
-                )}
-              </View>
-            )}
-
-            {/* ============= VIDEO SWAP ============= */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Video</Text>
-              <Text style={styles.hint}>
-                The same source face from step 1, swapped into every frame of a
-                clip. Keeps running if you leave the app, and a long clip takes
-                a while — roughly 10 frames a second at 720p.
-              </Text>
-
-              <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>Target clip</Text>
-                <TouchableOpacity onPress={pickVideoTarget}>
-                  <Text style={styles.pickLink}>Choose video…</Text>
                 </TouchableOpacity>
-              </View>
-              <TextInput
-                style={styles.input}
-                value={videoTargetPath}
-                onChangeText={setVideoTargetPath}
-                placeholder="Tap “Choose video…” — the clip to change"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
 
-              {/* ===== Target face picker (video) — same idea as the photo one above,
-                  detected from the clip's first frame. See ADR-0014. ===== */}
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={detectTargetFacesForVideo}
-                disabled={detectingVideoTargetFaces || !isReady}
-              >
-                {detectingVideoTargetFaces ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>
-                    Detect Faces in Target
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {detectVideoTargetError != null && (
-                <Text style={styles.errorText}>{detectVideoTargetError}</Text>
-              )}
-
-              {videoTargetFaces.length > 0 && (
-                <View style={styles.faceList}>
-                  <TouchableOpacity
-                    style={[
-                      styles.facePill,
-                      selectedVideoTargetFaceIndex === null &&
-                        styles.facePillSelected,
-                    ]}
-                    onPress={() => setSelectedVideoTargetFaceIndex(null)}
-                  >
-                    <Text style={styles.facePillText}>
-                      Every face (default)
-                    </Text>
-                  </TouchableOpacity>
-                  {videoTargetFaces.map((face, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={[
-                        styles.facePill,
-                        selectedVideoTargetFaceIndex === i &&
-                          styles.facePillSelected,
-                      ]}
-                      onPress={() => setSelectedVideoTargetFaceIndex(i)}
-                    >
-                      <Text style={styles.facePillText}>
-                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              {/* A locked box, not tracked frame to frame -- if the subject moves far out
-                  of it, that face silently stops being swapped. See ADR-0014. */}
-              {selectedVideoTargetFaceIndex !== null && (
-                <Text style={styles.hint}>
-                  Locked to this face's position in the first frame — not
-                  re-detected per frame, so a subject who moves far out of it
-                  stops being swapped.
-                </Text>
-              )}
-
-              <Text style={styles.inputLabel}>Output Path</Text>
-              <TextInput
-                style={styles.input}
-                value={videoOutputPath}
-                onChangeText={setVideoOutputPath}
-                placeholder="output video path"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-
-              {/* ===== FPS cap — set before running the swap. Drops frames before they
-                  ever reach the NPU or encoder, not after. See ADR-0014. ===== */}
-              <ToggleRow
-                label="Limit video FPS (faster swap, choppier output)"
-                value={fpsCapEnabled}
-                onChange={setFpsCapEnabled}
-              />
-              {fpsCapEnabled && (
-                <NumberStepper
-                  label="Target FPS"
-                  value={targetFpsValue}
-                  onChange={(v) => setTargetFpsValue(Math.round(v))}
-                  min={1}
-                  max={30}
-                  step={1}
-                />
-              )}
-
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  (videoSwapping || videoBlocker != null) &&
-                    styles.buttonDisabled,
-                ]}
-                onPress={swapVid}
-                disabled={videoSwapping || videoBlocker != null}
-                activeOpacity={0.8}
-              >
-                {videoSwapping ? (
-                  <ActivityIndicator size="small" color="#000000" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Run Video Swap</Text>
-                )}
-              </TouchableOpacity>
-
-              {videoBlocker != null && !videoSwapping && (
-                <Text style={styles.blockerText}>{videoBlocker}</Text>
-              )}
-
-              {videoSwapping && (
-                <TouchableOpacity
-                  style={[styles.secondaryButton, styles.cancelButton]}
-                  onPress={cancelVideoSwap}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Live Preview -- one frame at a time, straight from VideoSwap.kt's own
-                  decode/swap loop, drawn natively into this view's Surface. Same component
-                  as the photo card above; PreviewSurfaceHolder.kt doesn't know or care which
-                  swap is feeding it. */}
-              {videoSwapping && (
-                <View style={styles.previewContainer}>
-                  <FacefusionPreview style={styles.previewImage} />
-                </View>
-              )}
-
-              {videoProgress != null && videoSwapping && (
-                <View style={styles.progressBox}>
-                  <View style={styles.progressBarTrack}>
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { width: `${videoPercent}%` },
-                      ]}
+                {showPaths && (
+                  <View style={styles.pathsContainer}>
+                    <Text style={styles.inputLabel}>Target Video Path</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={videoTargetPath}
+                      onChangeText={setVideoTargetPath}
+                      placeholder="Target video path"
+                      placeholderTextColor="#636366"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Text style={styles.inputLabel}>Output Video Path</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={videoOutputPath}
+                      onChangeText={setVideoOutputPath}
+                      placeholder="Output video path"
+                      placeholderTextColor="#636366"
+                      autoCapitalize="none"
+                      autoCorrect={false}
                     />
                   </View>
-                  <Text style={styles.progressText}>
-                    frame {videoProgress.frameIndex}
-                    {videoProgress.estimatedFrameCount > 0
-                      ? ` / ~${videoProgress.estimatedFrameCount}`
-                      : ''}{' '}
-                    · {videoProgress.fps.toFixed(1)} fps
-                  </Text>
-                </View>
-              )}
-            </View>
+                )}
 
-            {videoError != null && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{videoError}</Text>
-              </View>
-            )}
-
-            {videoResult != null && (
-              <View style={styles.card}>
-                <View style={styles.resultMetaRow}>
-                  <Text style={styles.resultMetaText}>
-                    Frames:{' '}
-                    <Text style={styles.resultBold}>
-                      {videoResult.frameCount}
-                    </Text>
-                  </Text>
-                  <Text style={styles.resultMetaText}>
-                    Faces in:{' '}
-                    <Text style={styles.resultBold}>
-                      {videoResult.faceFrameCount}
-                    </Text>
-                  </Text>
-                  <Text style={styles.resultMetaText}>
-                    fps:{' '}
-                    <Text style={styles.resultBold}>
-                      {videoResult.fps.toFixed(1)}
-                    </Text>
-                  </Text>
-                </View>
-                <Text style={styles.resultMetaText}>
-                  Tier:{' '}
-                  <Text style={styles.resultBold}>{videoResult.tier}</Text> ·
-                  Audio:{' '}
-                  <Text style={styles.resultBold}>
-                    {videoResult.hasAudio ? 'yes' : 'none'}
-                  </Text>
-                </Text>
-                <Text
-                  style={styles.resultPathText}
-                  numberOfLines={1}
-                  ellipsizeMode="middle"
-                >
-                  {videoResult.outputPath}
-                </Text>
-
+                {/* Step 3: Run Video Swap Button */}
                 <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={saveVideoToGallery}
-                  disabled={savingVideo}
+                  style={[
+                    styles.primaryButton,
+                    (videoSwapping || videoBlocker != null) &&
+                      styles.buttonDisabled,
+                  ]}
+                  onPress={swapVid}
+                  disabled={videoSwapping || videoBlocker != null}
+                  activeOpacity={0.8}
                 >
-                  {savingVideo ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
+                  {videoSwapping ? (
+                    <ActivityIndicator size="small" color="#000000" />
                   ) : (
-                    <Text style={styles.secondaryButtonText}>
-                      Save to Gallery
+                    <Text style={styles.primaryButtonText}>
+                      3 Run Video Swap
                     </Text>
                   )}
                 </TouchableOpacity>
 
-                {savedVideoUri != null && (
-                  <Text
-                    style={styles.resultPathText}
-                    numberOfLines={1}
-                    ellipsizeMode="middle"
-                  >
-                    Saved: {savedVideoUri}
-                  </Text>
+                {videoBlocker != null && !videoSwapping && (
+                  <View style={styles.blockerCard}>
+                    <Text style={styles.blockerText}>{videoBlocker}</Text>
+                  </View>
                 )}
-                {saveVideoError != null && (
-                  <Text style={styles.errorText}>{saveVideoError}</Text>
+
+                {videoSwapping && (
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, styles.cancelButton]}
+                    onPress={cancelVideoSwap}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel Swap</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Live Preview */}
+                {videoSwapping && (
+                  <View style={styles.previewContainer}>
+                    <FacefusionPreview style={styles.previewImage} />
+                  </View>
+                )}
+
+                {videoProgress != null && videoSwapping && (
+                  <View style={styles.progressBox}>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          { width: `${videoPercent}%` },
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.progressInfoRow}>
+                      <Text style={styles.progressText}>
+                        frame {videoProgress.frameIndex}
+                        {videoProgress.estimatedFrameCount > 0
+                          ? ` / ~${videoProgress.estimatedFrameCount}`
+                          : ''}
+                      </Text>
+                      <Text style={styles.progressFpsText}>
+                        {videoProgress.fps.toFixed(1)} fps
+                      </Text>
+                    </View>
+                  </View>
                 )}
               </View>
-            )}
-            {/* ===== Advanced options. Deliberately LAST: these are expert
+
+              {videoError != null && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{videoError}</Text>
+                </View>
+              )}
+
+              {videoResult != null && (
+                <View style={styles.card}>
+                  <View style={styles.resultCardHeader}>
+                    <Text style={styles.resultTitle}>Video Result</Text>
+                    <View style={styles.resultSuccessBadge}>
+                      <Text style={styles.resultSuccessBadgeText}>Ready</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.resultMetaRow}>
+                    <View style={styles.resultChip}>
+                      <Text style={styles.resultMetaText}>
+                        Frames:{' '}
+                        <Text style={styles.resultBold}>
+                          {videoResult.frameCount}
+                        </Text>
+                      </Text>
+                    </View>
+                    <View style={styles.resultChip}>
+                      <Text style={styles.resultMetaText}>
+                        Faces:{' '}
+                        <Text style={styles.resultBold}>
+                          {videoResult.faceFrameCount}
+                        </Text>
+                      </Text>
+                    </View>
+                    <View style={styles.resultChip}>
+                      <Text style={styles.resultMetaText}>
+                        FPS:{' '}
+                        <Text style={styles.resultBold}>
+                          {videoResult.fps.toFixed(1)}
+                        </Text>
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.resultMetaRow}>
+                    <View style={styles.resultChip}>
+                      <Text style={styles.resultMetaText}>
+                        Tier:{' '}
+                        <Text style={styles.resultBold}>
+                          {videoResult.tier}
+                        </Text>
+                      </Text>
+                    </View>
+                    <View style={styles.resultChip}>
+                      <Text style={styles.resultMetaText}>
+                        Audio:{' '}
+                        <Text style={styles.resultBold}>
+                          {videoResult.hasAudio ? 'yes' : 'none'}
+                        </Text>
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.pathChip}>
+                    <Text
+                      style={styles.resultPathText}
+                      numberOfLines={1}
+                      ellipsizeMode="middle"
+                    >
+                      {videoResult.outputPath}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.saveButton}
+                    onPress={saveVideoToGallery}
+                    disabled={savingVideo}
+                    activeOpacity={0.7}
+                  >
+                    {savingVideo ? (
+                      <ActivityIndicator size="small" color="#34c759" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save to Gallery</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  {savedVideoUri != null && (
+                    <View style={styles.savedSuccessBox}>
+                      <Text
+                        style={styles.savedSuccessText}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        Saved: {savedVideoUri}
+                      </Text>
+                    </View>
+                  )}
+                  {saveVideoError != null && (
+                    <Text style={styles.errorText}>{saveVideoError}</Text>
+                  )}
+                </View>
+              )}
+            </>
+          )}
+
+          {/* ===== Advanced options. Deliberately LAST: these are expert
                 controls (mask blur, detector confidence, pixel boost) and a
                 first-time user should reach Source -> Target -> Run before
                 ever seeing them. They apply to both the photo and video swap
                 above. ===== */}
-            <View style={styles.card}>
+          {/* Advanced Options Trigger Bar */}
+          <TouchableOpacity
+            style={styles.advancedOptionsBar}
+            onPress={() => setShowOptionsSheet(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.advancedOptionsBarLeft}>
+              <Text style={styles.advancedOptionsTitle}>Advanced Options</Text>
+              <Text style={styles.advancedOptionsSubtitle}>
+                Identity blend, mask blur, detector & enhancer
+              </Text>
+            </View>
+            <View style={styles.advancedOptionsAction}>
+              <Text style={styles.advancedOptionsActionText}>Configure</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* Advanced Options Bottom Sheet Modal */}
+      <Modal
+        visible={showOptionsSheet}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowOptionsSheet(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowOptionsSheet(false)}
+          />
+          <View style={styles.bottomSheetContainer}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Advanced Options</Text>
               <TouchableOpacity
-                style={styles.labelRow}
-                onPress={() => setOptionsExpanded((v) => !v)}
+                onPress={() => setShowOptionsSheet(false)}
+                style={styles.sheetDoneButton}
                 activeOpacity={0.7}
               >
-                <Text style={styles.cardTitle}>Advanced Options</Text>
-                <Text style={styles.pickLink}>
-                  {optionsExpanded ? 'Hide ▲' : 'Show ▼'}
-                </Text>
+                <Text style={styles.sheetDoneText}>Done</Text>
               </TouchableOpacity>
-
-              {optionsExpanded && (
-                <View style={styles.optionsBody}>
-                  <NumberStepper
-                    label="Blend (source ↔ target identity)"
-                    value={swapperWeight}
-                    onChange={setSwapperWeight}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Mask blur"
-                    value={maskBlur}
-                    onChange={setMaskBlur}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Mask padding"
-                    value={maskPadding}
-                    onChange={setMaskPadding}
-                    min={0}
-                    max={100}
-                    step={5}
-                    format={(v) => `${v}%`}
-                  />
-                  <NumberStepper
-                    label="Detector confidence"
-                    value={detectorScore}
-                    onChange={setDetectorScore}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Landmarker confidence"
-                    value={landmarkerScore}
-                    onChange={setLandmarkerScore}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  />
-                  <NumberStepper
-                    label="Pixel boost"
-                    value={pixelBoost}
-                    onChange={(v) => setPixelBoost(Math.round(v))}
-                    min={1}
-                    max={4}
-                    step={1}
-                    format={(v) => `${v}× (${256 * v}px)`}
-                  />
-                  <ToggleRow
-                    label="Swap largest face only (target)"
-                    value={largestFaceOnly}
-                    onChange={setLargestFaceOnly}
-                  />
-                  <ToggleRow
-                    label={
-                      models?.hasEnhancer
-                        ? 'Face enhancer'
-                        : 'Face enhancer (not downloaded)'
-                    }
-                    value={faceEnhance}
-                    onChange={setFaceEnhance}
-                    disabled={!models?.hasEnhancer}
-                  />
-                  {faceEnhance && (
+            </View>
+            <ScrollView
+              style={styles.sheetContent}
+              contentContainerStyle={styles.sheetInner}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.sheetOptionsGroup}>
+                <NumberStepper
+                  label="Identity blend"
+                  value={swapperWeight}
+                  onChange={setSwapperWeight}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                />
+                <View style={styles.optionDivider} />
+                <NumberStepper
+                  label="Mask blur"
+                  value={maskBlur}
+                  onChange={setMaskBlur}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                />
+                <View style={styles.optionDivider} />
+                <NumberStepper
+                  label="Mask padding"
+                  value={maskPadding}
+                  onChange={setMaskPadding}
+                  min={0}
+                  max={100}
+                  step={5}
+                  format={(v) => `${v}%`}
+                />
+                <View style={styles.optionDivider} />
+                <NumberStepper
+                  label="Detector confidence"
+                  value={detectorScore}
+                  onChange={setDetectorScore}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                />
+                <View style={styles.optionDivider} />
+                <NumberStepper
+                  label="Landmarker confidence"
+                  value={landmarkerScore}
+                  onChange={setLandmarkerScore}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                />
+                <View style={styles.optionDivider} />
+                <NumberStepper
+                  label="Pixel boost"
+                  value={pixelBoost}
+                  onChange={(v) => setPixelBoost(Math.round(v))}
+                  min={1}
+                  max={4}
+                  step={1}
+                  format={(v) => `${v}x (${256 * v}px)`}
+                />
+                <View style={styles.optionDivider} />
+                <ToggleRow
+                  label="Swap largest face only"
+                  value={largestFaceOnly}
+                  onChange={setLargestFaceOnly}
+                />
+                <View style={styles.optionDivider} />
+                <ToggleRow
+                  label={
+                    models?.hasEnhancer
+                      ? 'Face enhancer'
+                      : 'Face enhancer (not downloaded)'
+                  }
+                  value={faceEnhance}
+                  onChange={toggleFaceEnhance}
+                  disabled={!models?.hasEnhancer}
+                />
+                {faceEnhance && (
+                  <>
+                    <View style={styles.optionDivider} />
                     <NumberStepper
                       label="Enhancer blend"
                       value={faceEnhancerBlend}
@@ -1107,136 +1611,172 @@ export default function App() {
                       max={1}
                       step={0.1}
                     />
+                  </>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Device & Models Bottom Sheet Modal */}
+      <Modal
+        visible={showDeviceSheet}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDeviceSheet(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowDeviceSheet(false)}
+          />
+          <View style={styles.bottomSheetContainer}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Device & Models</Text>
+              <TouchableOpacity
+                onPress={() => setShowDeviceSheet(false)}
+                style={styles.sheetDoneButton}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sheetDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.sheetContent}
+              contentContainerStyle={styles.sheetInner}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Device Section */}
+              <View style={styles.card}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={styles.cardTitle}>Device</Text>
+                  {probing && (
+                    <ActivityIndicator size="small" color="#8e8e93" />
                   )}
                 </View>
-              )}
-            </View>
-          </View>
-        ) : (
-          /* ================= DEVICE & MODELS VIEW ================= */
-          <View style={styles.tabPane}>
-            {/* Device Section */}
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitle}>Device</Text>
-                {probing && <ActivityIndicator size="small" color="#8e8e93" />}
-              </View>
 
-              {probe == null ? (
-                <Text style={styles.mutedText}>Probing device…</Text>
-              ) : (
-                <>
-                  <Row label="Tier" value={probe.tier} />
-                  <Separator />
-                  <Row label="Chain" value={probe.tierChain.join(' → ')} />
-                  <Separator />
-                  <Row label="Verified NPU" value={probe.ok ? 'Yes' : 'No'} />
-                  <Separator />
-                  <Row
-                    label="Architecture"
-                    value={probe.ok ? `v${probe.arch}` : '—'}
-                  />
-                  <Separator />
-                  <Row
-                    label="VTCM Memory"
-                    value={probe.ok ? `${probe.vtcmMb} MB` : '—'}
-                  />
-                  <Separator />
-                  <Row
-                    label="SoC ID"
-                    value={probe.ok ? String(probe.socModel) : '—'}
-                  />
-                  {probe.error ? (
-                    <>
-                      <Separator />
-                      <Text style={styles.errorText}>{probe.error}</Text>
-                    </>
-                  ) : null}
-                </>
-              )}
-            </View>
-
-            {/* Models Section */}
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitle}>Models</Text>
-              </View>
-
-              {models == null ? (
-                <Text style={styles.mutedText}>Checking models…</Text>
-              ) : (
-                <>
-                  <Row
-                    label="Status"
-                    value={models.ready ? 'Ready' : 'Incomplete'}
-                    highlight={models.ready}
-                  />
-                  <Separator />
-                  <Row label="Active Tier" value={models.tier} />
-                  <Separator />
-                  <Row
-                    label="Missing"
-                    value={models.ready ? 'None' : models.missing.join(', ')}
-                  />
-                  <Separator />
-                  <Row
-                    label="Enhancer"
-                    value={models.hasEnhancer ? 'Installed' : 'None'}
-                  />
-                  <Separator />
-                  <Row
-                    label="Network"
-                    value={models.metered ? 'Metered' : 'Unmetered'}
-                  />
-                </>
-              )}
-
-              {/* Progress UI */}
-              {progress != null && busy && (
-                <View style={styles.progressBox}>
-                  <View style={styles.progressBarTrack}>
-                    <View
-                      style={[styles.progressBarFill, { width: `${percent}%` }]}
+                {probe == null ? (
+                  <Text style={styles.mutedText}>Probing device...</Text>
+                ) : (
+                  <>
+                    <Row label="Tier" value={probe.tier} />
+                    <Separator />
+                    <Row label="Chain" value={probe.tierChain.join(' -> ')} />
+                    <Separator />
+                    <Row label="Verified NPU" value={probe.ok ? 'Yes' : 'No'} />
+                    <Separator />
+                    <Row
+                      label="Architecture"
+                      value={probe.ok ? `v${probe.arch}` : '—'}
                     />
-                  </View>
-                  <Text style={styles.progressText}>
-                    {progress.name ? `${progress.name} · ` : ''}
-                    {(progress.doneBytes / 1e6).toFixed(1)} /{' '}
-                    {(progress.totalBytes / 1e6).toFixed(1)} MB ({percent}%)
-                  </Text>
+                    <Separator />
+                    <Row
+                      label="VTCM Memory"
+                      value={probe.ok ? `${probe.vtcmMb} MB` : '—'}
+                    />
+                    <Separator />
+                    <Row
+                      label="SoC ID"
+                      value={probe.ok ? String(probe.socModel) : '—'}
+                    />
+                    {probe.error ? (
+                      <>
+                        <Separator />
+                        <Text style={styles.errorText}>{probe.error}</Text>
+                      </>
+                    ) : null}
+                  </>
+                )}
+              </View>
+
+              {/* Models Section */}
+              <View style={styles.card}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={styles.cardTitle}>Models</Text>
                 </View>
-              )}
 
-              {modelError != null && (
-                <Text style={styles.errorText}>{modelError}</Text>
-              )}
+                {models == null ? (
+                  <Text style={styles.mutedText}>Checking models...</Text>
+                ) : (
+                  <>
+                    <Row
+                      label="Status"
+                      value={models.ready ? 'Ready' : 'Incomplete'}
+                      highlight={models.ready}
+                    />
+                    <Separator />
+                    <Row label="Active Tier" value={models.tier} />
+                    <Separator />
+                    <Row
+                      label="Missing"
+                      value={models.ready ? 'None' : models.missing.join(', ')}
+                    />
+                    <Separator />
+                    <Row
+                      label="Enhancer"
+                      value={models.hasEnhancer ? 'Installed' : 'None'}
+                    />
+                    <Separator />
+                    <Row
+                      label="Network"
+                      value={models.metered ? 'Metered' : 'Unmetered'}
+                    />
+                  </>
+                )}
 
-              {/* Download Buttons */}
-              {models != null && !models.ready && !busy && (
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={download}
-                >
-                  <Text style={styles.secondaryButtonText}>
-                    {models.metered
-                      ? 'Download Models (~317 MB, Metered)'
-                      : 'Download Models (~317 MB)'}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                {/* Progress UI */}
+                {progress != null && busy && (
+                  <View style={styles.progressBox}>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          { width: `${percent}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {progress.name ? `${progress.name} · ` : ''}
+                      {(progress.doneBytes / 1e6).toFixed(1)} /{' '}
+                      {(progress.totalBytes / 1e6).toFixed(1)} MB ({percent}%)
+                    </Text>
+                  </View>
+                )}
 
-              {busy && (
-                <TouchableOpacity
-                  style={[styles.secondaryButton, styles.cancelButton]}
-                  onPress={cancelModelDownload}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel Download</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+                {modelError != null && (
+                  <Text style={styles.errorText}>{modelError}</Text>
+                )}
+
+                {/* Download Buttons */}
+                {models != null && !models.ready && !busy && (
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={download}
+                  >
+                    <Text style={styles.secondaryButtonText}>
+                      {models.metered
+                        ? 'Download Models (~317 MB, Metered)'
+                        : 'Download Models (~317 MB)'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {busy && (
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, styles.cancelButton]}
+                    onPress={cancelModelDownload}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel Download</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </ScrollView>
           </View>
-        )}
-      </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1286,13 +1826,14 @@ function NumberStepper({
   const clamp = (v: number) => Math.min(max, Math.max(min, +v.toFixed(2)));
   return (
     <View style={styles.stepperRow}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.stepperLabel}>{label}</Text>
       <View style={styles.stepperControls}>
         <TouchableOpacity
           style={styles.stepperButton}
           onPress={() => onChange(clamp(value - step))}
+          activeOpacity={0.7}
         >
-          <Text style={styles.stepperButtonText}>−</Text>
+          <Text style={styles.stepperButtonText}>-</Text>
         </TouchableOpacity>
         <Text style={styles.stepperValue}>
           {format ? format(value) : value.toFixed(2)}
@@ -1300,6 +1841,7 @@ function NumberStepper({
         <TouchableOpacity
           style={styles.stepperButton}
           onPress={() => onChange(clamp(value + step))}
+          activeOpacity={0.7}
         >
           <Text style={styles.stepperButtonText}>+</Text>
         </TouchableOpacity>
@@ -1320,9 +1862,19 @@ function ToggleRow({
   disabled?: boolean;
 }) {
   return (
-    <View style={styles.row}>
-      <Text style={[styles.label, disabled && styles.mutedText]}>{label}</Text>
-      <Switch value={value} onValueChange={onChange} disabled={disabled} />
+    <View style={styles.stepperRow}>
+      <Text style={[styles.stepperLabel, disabled && styles.mutedText]}>
+        {label}
+      </Text>
+      <View style={styles.toggleWrapper}>
+        <Switch
+          value={value}
+          onValueChange={onChange}
+          disabled={disabled}
+          trackColor={{ false: '#3a3a3c', true: '#34c759' }}
+          thumbColor="#ffffff"
+        />
+      </View>
     </View>
   );
 }
@@ -1373,31 +1925,23 @@ const styles = StyleSheet.create({
   textPending: {
     color: '#ff9f0a',
   },
-  segmentContainer: {
+  topBarRight: {
     flexDirection: 'row',
-    backgroundColor: '#1c1c1e',
-    borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 2,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 7,
     alignItems: 'center',
-    borderRadius: 6,
+    gap: 8,
   },
-  segmentActive: {
-    backgroundColor: '#2c2c2e',
+  deviceButton: {
+    backgroundColor: '#242426',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#343438',
   },
-  segmentText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#8e8e93',
-  },
-  segmentTextActive: {
-    color: '#ffffff',
+  deviceButtonText: {
+    fontSize: 12,
     fontWeight: '600',
+    color: '#ffffff',
   },
   content: {
     flex: 1,
@@ -1423,8 +1967,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#1c1c1e',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -1439,24 +1985,135 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  // The step number badge in "1 Source face" / "2 Target photo" / "3 Run Swap" --
-  // the flow used to be implicit and a first-time user had to infer the order.
-  stepNumber: {
-    color: '#0a84ff',
+  boxHeader: {
+    marginBottom: 12,
+  },
+  boxTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  boxTitle: {
+    fontSize: 16,
     fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: -0.2,
+  },
+  badgeTag: {
+    backgroundColor: 'rgba(10, 132, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(10, 132, 255, 0.3)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  badgeTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0a84ff',
+    letterSpacing: 0.5,
+  },
+  stepSection: {
+    backgroundColor: '#242426',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#323236',
+    padding: 12,
+    marginBottom: 10,
+  },
+  stepHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  stepTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#0a84ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBadgeNumber: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  stepTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  actionPill: {
+    backgroundColor: 'rgba(10, 132, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(10, 132, 255, 0.3)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  actionPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0a84ff',
+  },
+  blockerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 159, 10, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 159, 10, 0.25)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginTop: 8,
   },
   // Why the primary button is disabled, said out loud. Amber, not red: nothing has
   // gone wrong yet, the user just has a step left.
   blockerText: {
-    marginTop: 8,
     fontSize: 12,
     color: '#ff9f0a',
     textAlign: 'center',
+    flex: 1,
   },
   hint: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#8e8e93',
+    lineHeight: 16,
+  },
+  identityNotice: {
+    backgroundColor: 'rgba(10, 132, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(10, 132, 255, 0.2)',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     marginBottom: 10,
+  },
+  identityNoticeText: {
+    fontSize: 11,
+    color: '#0a84ff',
+    fontWeight: '500',
+  },
+  lockedNotice: {
+    backgroundColor: 'rgba(255, 159, 10, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 159, 10, 0.2)',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginTop: 8,
+  },
+  lockedNoticeText: {
+    fontSize: 11,
+    color: '#ff9f0a',
     lineHeight: 15,
   },
   inputLabel: {
@@ -1476,22 +2133,43 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   input: {
-    backgroundColor: '#2c2c2e',
+    backgroundColor: '#18181a',
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 13,
+    borderWidth: 1,
+    borderColor: '#343438',
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    fontSize: 12,
     color: '#ffffff',
-    marginBottom: 8,
     fontVariant: ['tabular-nums'],
+  },
+  detectButton: {
+    backgroundColor: '#2c2c2e',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  detectButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ebebf5',
   },
   primaryButton: {
     backgroundColor: '#ffffff',
-    borderRadius: 8,
-    paddingVertical: 11,
+    borderRadius: 10,
+    paddingVertical: 13,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   secondaryButton: {
     backgroundColor: '#2c2c2e',
@@ -1506,8 +2184,9 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#000000',
+    letterSpacing: 0.2,
   },
   secondaryButtonText: {
     fontSize: 13,
@@ -1515,7 +2194,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   cancelButton: {
-    backgroundColor: '#3a1c1c',
+    backgroundColor: 'rgba(255, 69, 58, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 69, 58, 0.35)',
   },
   cancelButtonText: {
     fontSize: 13,
@@ -1558,28 +2239,97 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 69, 58, 0.12)',
     padding: 10,
     borderRadius: 8,
+    marginTop: 6,
   },
   errorText: {
     fontSize: 12,
     color: '#ff453a',
   },
-  resultMetaRow: {
+  previewHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(52, 199, 89, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#34c759',
+  },
+  liveText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#34c759',
+    letterSpacing: 0.5,
+  },
+  resultCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  resultTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  resultSuccessBadge: {
+    backgroundColor: 'rgba(52, 199, 89, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  resultSuccessBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#34c759',
+  },
+  resultMetaRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  resultChip: {
+    backgroundColor: '#242426',
+    borderWidth: 1,
+    borderColor: '#323236',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   resultMetaText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#8e8e93',
   },
   resultBold: {
     color: '#ffffff',
     fontWeight: '600',
   },
+  pathChip: {
+    backgroundColor: '#18181a',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
   resultPathText: {
     fontSize: 11,
-    color: '#636366',
-    marginBottom: 8,
+    color: '#8e8e93',
     fontVariant: ['tabular-nums'],
   },
   previewContainer: {
@@ -1588,85 +2338,543 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
   },
   previewImage: {
     width: '100%',
     height: 200,
   },
+  saveButton: {
+    backgroundColor: 'rgba(52, 199, 89, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  saveButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#34c759',
+  },
+  savedSuccessBox: {
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 199, 89, 0.25)',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 8,
+  },
+  savedSuccessText: {
+    fontSize: 11,
+    color: '#34c759',
+    fontVariant: ['tabular-nums'],
+  },
+  fpsOptionsContainer: {
+    marginTop: 6,
+    marginBottom: 6,
+  },
   progressBox: {
     marginTop: 10,
   },
   progressBarTrack: {
-    height: 4,
+    height: 6,
     backgroundColor: '#2c2c2e',
-    borderRadius: 2,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0a84ff',
+    borderRadius: 3,
+  },
+  progressInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
   },
   progressText: {
     fontSize: 11,
     color: '#8e8e93',
-    marginTop: 5,
     fontVariant: ['tabular-nums'],
   },
-  optionsBody: {
-    marginTop: 10,
-    gap: 4,
+  progressFpsText: {
+    fontSize: 11,
+    color: '#0a84ff',
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   stepperRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    minHeight: 48,
+  },
+  stepperLabel: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '500',
+    flex: 1,
+    marginRight: 12,
   },
   stepperControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  toggleWrapper: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: 50,
   },
   stepperButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: '#2c2c2e',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: '#ffffff',
+    lineHeight: 20,
+    textAlign: 'center',
   },
   stepperValue: {
     fontSize: 13,
-    color: '#ffffff',
-    fontWeight: '500',
+    color: '#0a84ff',
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
-    minWidth: 56,
+    width: 70,
     textAlign: 'center',
+  },
+  optionDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#2c2c2e',
   },
   faceList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     marginTop: 8,
-    marginBottom: 8,
   },
   facePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: '#1c1c1e',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
   },
   facePillSelected: {
     backgroundColor: '#0a84ff',
+    borderColor: '#0a84ff',
   },
   facePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8e8e93',
+  },
+  facePillTextSelected: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  swapModeBar: {
+    flexDirection: 'row',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  modeTab: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  modeTabActive: {
+    backgroundColor: '#2c2c2e',
+  },
+  modeTabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#8e8e93',
+  },
+  modeTabTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  runningBadge: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0a84ff',
+  },
+  dualMediaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 12,
+  },
+  mediaCol: {
+    flex: 1,
+    backgroundColor: '#242426',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#323236',
+    padding: 10,
+  },
+  arrowCol: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 54,
+  },
+  arrowBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#2c2c2e',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowChar: {
+    fontSize: 13,
+    color: '#0a84ff',
+    fontWeight: '700',
+  },
+  mediaSlot: {
+    width: '100%',
+    height: 120,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#18181a',
+    borderWidth: 1,
+    borderColor: '#343438',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginBottom: 8,
+  },
+  mediaImage: {
+    width: '100%',
+    height: '100%',
+  },
+  changeOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  changeOverlayText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  placeholderBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  placeholderIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#242426',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  placeholderPlus: {
+    fontSize: 20,
+    lineHeight: 22,
+    color: '#0a84ff',
+    fontWeight: '400',
+  },
+  placeholderMain: {
     fontSize: 12,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  placeholderSub: {
+    fontSize: 10,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  compactDetectButton: {
+    backgroundColor: '#2c2c2e',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+    borderRadius: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactDetectButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ebebf5',
+  },
+  compactErrorBox: {
+    backgroundColor: 'rgba(255, 69, 58, 0.12)',
+    padding: 6,
+    borderRadius: 6,
+    marginTop: 6,
+  },
+  compactErrorText: {
+    fontSize: 10,
+    color: '#ff453a',
+    textAlign: 'center',
+  },
+  facePillWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 6,
+  },
+  facePillCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#1c1c1e',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  facePillTextCompact: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#8e8e93',
+  },
+  pathsToggle: {
+    paddingVertical: 6,
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  pathsToggleText: {
+    fontSize: 11,
+    color: '#0a84ff',
+    fontWeight: '500',
+  },
+  pathsContainer: {
+    backgroundColor: '#18181a',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    padding: 10,
+    marginBottom: 10,
+  },
+  videoSlotActive: {
+    width: '100%',
+    height: '100%',
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  videoCompactFileName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  videoTagBadge: {
+    backgroundColor: '#242426',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  videoTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#0a84ff',
+    letterSpacing: 0.5,
+  },
+  compactFpsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#18181a',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  compactFpsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  compactFpsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  fpsStepperInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#242426',
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    gap: 6,
+  },
+  fpsMiniBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    backgroundColor: '#2c2c2e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fpsMiniBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+    lineHeight: 16,
+  },
+  fpsValueText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0a84ff',
+    fontVariant: ['tabular-nums'],
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  bottomSheetContainer: {
+    backgroundColor: '#1c1c1e',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '82%',
+    maxHeight: '90%',
+    paddingBottom: Platform.OS === 'android' ? 24 : 34,
+    borderTopWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3a3a3c',
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2c2c2e',
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: -0.2,
+  },
+  sheetDoneButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  sheetDoneText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0a84ff',
+  },
+  sheetContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  sheetInner: {
+    paddingVertical: 16,
+    gap: 12,
+  },
+  sheetOptionsGroup: {
+    backgroundColor: '#242426',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    overflow: 'hidden',
+  },
+  advancedOptionsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    marginTop: 2,
+  },
+  advancedOptionsBarLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  advancedOptionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  advancedOptionsSubtitle: {
+    fontSize: 11,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  advancedOptionsAction: {
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  advancedOptionsActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0a84ff',
   },
 });
