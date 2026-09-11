@@ -16,8 +16,6 @@
     "src",
     "lib",
     "android",
-    "cpp",
-    "react-native.config.js",
     "scripts/fetch-upstream.sh",
     "patches",
     "third_party/facefusion-mobile/NOTICE",

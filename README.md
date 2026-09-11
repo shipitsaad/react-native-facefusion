@@ -54,6 +54,21 @@ rather than running them by hand once and forgetting — a CI machine or a new
 teammate's clone will otherwise fail at CMake configure with a message naming the
 missing piece.
 
+**Your app's `android/build.gradle` needs `minSdkVersion = 31`.** A fresh React Native
+app is `24`, and this package builds against your value, not its own — so leaving it at
+24 produces an APK that installs on Android 7 and crashes there instead of reporting an
+unsupported device. The library refuses to build below 31, so the manifest merge fails
+with a message naming it rather than building something that cannot work:
+
+```groovy
+// android/build.gradle
+buildscript {
+    ext {
+        minSdkVersion = 31 // required -- the default 24 is below what this package supports
+    }
+}
+```
+
 Your app's `android/app/build.gradle` also needs:
 
 ```groovy

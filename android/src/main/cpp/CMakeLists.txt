@@ -11,19 +11,28 @@ project(ffnative)
 set(FF_UPSTREAM "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/facefusion-mobile/cpp")
 
 # Both of these are fetched, not committed, and both fail here rather than 200 lines
-# into a compiler error nobody can read. See docs/03-setup.md.
+# into a compiler error nobody can read.
+#
+# These two messages point at README.md's "Install" section, NOT at docs/ -- docs/ is
+# the local engineering record and ships in zero files of the npm package, so a
+# consumer told to read docs/03-setup.md is told to read a file they do not have. This
+# is the likeliest error any new installer hits (a plain `npm install` leaves both
+# pieces absent, and a later `npm install` wipes them again), so it has to be
+# actionable from inside node_modules with nothing else to hand.
 if(NOT EXISTS "${FF_UPSTREAM}/ffjni.cpp")
   message(FATAL_ERROR
     "Upstream C++ engine is missing from third_party/facefusion-mobile/cpp/.\n"
-    "It is not committed to this repo (no upstream licence -- docs/05-licensing.md).\n"
-    "Run:  ./scripts/fetch-upstream.sh")
+    "It is not shipped in this package: upstream publishes no licence.\n"
+    "Run:  ./node_modules/react-native-facefusion/scripts/fetch-upstream.sh\n"
+    "See README.md -> Install, step 1.")
 endif()
 
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/QNN/QnnBackend.h")
   message(FATAL_ERROR
     "Qualcomm QNN headers are missing from android/src/main/cpp/include/QNN/.\n"
-    "The QAIRT SDK is proprietary and cannot be shipped in this package.\n"
-    "See docs/03-setup.md for the download and the exact file list.")
+    "The QAIRT SDK is proprietary and cannot be shipped in this package; copy it in\n"
+    "yourself, into THIS directory (not your app's).\n"
+    "See README.md -> Install, step 2, for the download and the exact file list.")
 endif()
 
 # The same four objects upstream's app and headless CLI both link.

@@ -33,10 +33,41 @@ for f in "${FILES[@]}"; do
   echo "  $f"
 done
 
+# Verify against NOTICE, and FAIL on a mismatch. This used to print the hashes and tell
+# the reader to compare them by eye, while the comment below claimed a check had happened
+# -- a promise the script did not keep, found by installing the npm tarball into a clean
+# app and reading what actually ran. A check nobody performs is not a check.
+NOTICE="$ROOT/third_party/facefusion-mobile/NOTICE"
 echo
-echo "Done. Verify against third_party/facefusion-mobile/NOTICE:"
-if command -v shasum >/dev/null; then
-  (cd "$DEST" && shasum -a 256 "${FILES[@]}")
+if ! command -v shasum >/dev/null; then
+  echo "WARNING: shasum not found -- cannot verify the fetch against NOTICE." >&2
+elif [ ! -f "$NOTICE" ]; then
+  echo "WARNING: $NOTICE is missing -- cannot verify the fetch." >&2
+else
+  echo "Verifying against third_party/facefusion-mobile/NOTICE ..."
+  fail=0
+  for f in "${FILES[@]}"; do
+    got="$(shasum -a 256 "$DEST/$f" | cut -d' ' -f1)"
+    # NOTICE records each hash in a markdown table row naming the file: `cpp/ffjni.cpp`.
+    want="$(grep -F "cpp/$f\`" "$NOTICE" | grep -oE '[0-9a-f]{64}' | head -1)"
+    if [ -z "$want" ]; then
+      echo "  ?? $f -- no hash recorded in NOTICE" >&2; fail=1
+    elif [ "$got" != "$want" ]; then
+      echo "  !! $f -- MISMATCH" >&2
+      echo "       expected $want" >&2
+      echo "       got      $got" >&2
+      fail=1
+    else
+      echo "  ok $f"
+    fi
+  done
+  if [ "$fail" -ne 0 ]; then
+    echo >&2
+    echo "Upstream bytes do not match NOTICE. Refusing to patch or continue: a patch" >&2
+    echo "applied to unexpected sources would mask exactly this. If upstream moved on" >&2
+    echo "purpose, re-pin COMMIT and update NOTICE deliberately, with a diff review." >&2
+    exit 1
+  fi
 fi
 
 # Patches, applied AFTER the hash check above -- that check verifies we got upstream's

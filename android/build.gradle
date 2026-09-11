@@ -42,7 +42,18 @@ android {
   // runtime we dlopen ships no other ABI -- building x86/armeabi would produce a
   // libffnative.so that can never find a backend.
   defaultConfig {
-    minSdkVersion getExtOrDefault("minSdkVersion")
+    // A FLOOR, not a preference. getExtOrDefault checks rootProject.ext first, and every
+    // React Native app template defines ext.minSdkVersion -- so a consumer's value ALWAYS
+    // wins and the `minSdkVersion: 31` default above is dead in any real install. A fresh
+    // RN app is 24, which built this library silently at 24 in a clean-consumer test:
+    // no error, an APK that installs on Android 7, and API-31+ calls in our own Kotlin
+    // (startForeground's 3-arg overload, for one) waiting to throw NoSuchMethodError at
+    // runtime instead of ADR-0006's designed "unsupported device" answer.
+    //
+    // max() keeps a consumer's HIGHER floor and refuses a lower one. The consumer then
+    // fails at manifest merge with a message naming this library and the number to
+    // raise -- which is the outcome we want: loud, at build time, actionable.
+    minSdkVersion Math.max(getExtOrDefault("minSdkVersion") as int, 31)
     ndk {
       abiFilters "arm64-v8a"
     }
