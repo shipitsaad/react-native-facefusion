@@ -9,9 +9,16 @@ photo or video never leaves the device.
 - **Android only.** There is no iOS implementation. This runs on Qualcomm's Hexagon
   DSP via QNN, which Apple silicon has no equivalent path for.
 - **Android 12+ (`minSdk 31`), `arm64-v8a` only.**
-- **A Snapdragon chip with a Hexagon NPU.** On anything else — an emulator included,
-  since no emulator has a Hexagon DSP — every call still resolves, but the NPU-backed
-  ones report `ok: false` rather than hanging or crashing.
+- **A Snapdragon chip with a Hexagon NPU**, and one whose Hexagon architecture your
+  build actually bundles a runtime for. The example app ships **v68, v69, v73, v75, v79
+  and v81** — roughly Snapdragon 888 through 8 Elite Gen 5. The architecture is a
+  property of the silicon and is chosen independently of the model tier, so a build
+  missing that pair cannot reach the DSP on that phone at all; `probeDevice()` reports
+  which ones the build contains. v66 and older cannot be supported: that generation
+  predates the HTP backend entirely and QAIRT ships it only as a `QnnDsp` build.
+- On anything else — an emulator included, since no emulator has a Hexagon DSP — every
+  call still resolves, but the NPU-backed ones report `ok: false` rather than hanging or
+  crashing.
 - **A one-time native SDK step at install**, described below. It cannot be skipped
   and it cannot be bundled into this package — see [Install](#install).
 
@@ -194,11 +201,12 @@ aggregate 10% rate, and the native-error-means-refusal path.
   once, so an uncapped 50 MP photo — the main camera on the phones this library
   requires — needs ~950 MB and cannot run at all. Videos are unaffected; they process
   at the clip's own resolution.
-- **Three Qualcomm libraries are not 16 KB page-size aligned.** Android 15+ warns when
+- **Qualcomm's Hexagon skel libraries are not 16 KB page-size aligned.** Android 15+ warns when
   an APK contains a native library aligned to the old 4 KB page assumption. Measured
-  across all 19 libraries in a release build: 16 are aligned correctly, including this
-  package's own `libffnative.so` and every React Native and Hermes library. The three
-  that are not are `libQnnHtpV{73,79,81}Skel.so`, which ship prebuilt in Qualcomm's
+  across all 25 libraries in a release build: 19 are aligned correctly, including this
+  package's own `libffnative.so` and every React Native and Hermes library. The six
+  that are not are `libQnnHtpV*Skel.so` — one per Hexagon architecture — which ship
+  prebuilt in Qualcomm's
   QAIRT SDK and can only be fixed upstream. They are Hexagon DSP images loaded over
   fastrpc rather than mapped into the app's address space, so this is a packaging-check
   warning rather than a loading failure — but the warning is shown to users on Android
