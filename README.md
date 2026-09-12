@@ -41,8 +41,13 @@ npm install react-native-facefusion
 #   include/QNN/                                -> $PKG/cpp/include/QNN/
 #   lib/aarch64-android/libQnnHtp.so            -> $PKG/jniLibs/arm64-v8a/
 #   lib/aarch64-android/libQnnSystem.so         -> $PKG/jniLibs/arm64-v8a/
-#   lib/aarch64-android/libQnnHtpV{73,79,81}Stub.so -> $PKG/jniLibs/arm64-v8a/
-#   lib/hexagon-v{73,79,81}/unsigned/libQnnHtpV{73,79,81}Skel.so -> $PKG/jniLibs/arm64-v8a/
+#   lib/aarch64-android/libQnnHtpV*Stub.so      -> $PKG/jniLibs/arm64-v8a/   (ALL of them)
+#   lib/hexagon-v*/unsigned/libQnnHtpV*Skel.so  -> $PKG/jniLibs/arm64-v8a/   (ALL of them)
+#
+# Copy EVERY architecture, not a chosen few. libQnnHtp.so picks the Stub/Skel pair from
+# the chip's own Hexagon architecture, not from the model tier -- so a missing pair means
+# "deviceCreate failed -- the DSP is not reachable from this process" on every phone of
+# that generation, however many models are downloaded. ~12 MB per architecture.
 #
 # Leave out libQnnHtpPrepare.so -- it's the on-device graph compiler (82 MB) and the
 # models arrive pre-compiled, so it is exactly the step this never performs.

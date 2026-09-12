@@ -95,9 +95,44 @@ data class DeviceProbe(
         dlbc = info["dlbc"] == "1",
         // lastError() is whatever failed most recently, so it is only meaningful when
         // something did. Reading it on the success path would report a stale message.
-        error = if (ok) "" else NativePipe.lastError(),
+        error = if (ok) "" else explain(NativePipe.lastError(), libDir),
       )
     }
+
+    /**
+     * Turns the native layer's `deviceCreate failed -- the DSP is not reachable from this
+     * process` into something a person can act on.
+     *
+     * That message is accurate and useless: the overwhelmingly common cause is not a broken
+     * phone but a **missing Hexagon skel for this chip's architecture**. `libQnnHtp.so`
+     * loads `libQnnHtpV<arch>Skel.so` chosen from the *silicon*, not from the model tier --
+     * so a build that bundles v73/v79/v81 cannot reach the DSP on an 8 Gen 1 (v69) no
+     * matter which models are on disk. Reported 2026-09-12 by the first person outside
+     * Saad's own 8 Elite to run this.
+     *
+     * The arch cannot be named here: it is measured by the very call that just failed, so
+     * on this path it reads 0. What *can* be named is what this build actually ships, which
+     * is enough for anyone to see the mismatch.
+     */
+    private fun explain(nativeError: String, libDir: String): String {
+      if (!nativeError.contains("deviceCreate")) return nativeError
+      val bundled = java.io.File(libDir)
+        .list { _, name -> SKEL.matches(name) }
+        ?.map { SKEL.find(it)!!.groupValues[1] }
+        ?.sortedBy { it.toIntOrNull() ?: 0 }
+        .orEmpty()
+      return when {
+        bundled.isEmpty() ->
+          "$nativeError. No Hexagon runtime is bundled in this build at all -- see the " +
+            "QAIRT SDK step in the README."
+        else ->
+          "$nativeError. This build bundles the Hexagon runtime for " +
+            bundled.joinToString(", ") { "v$it" } +
+            " only; this chip needs a different one, so no swap can run here."
+      }
+    }
+
+    private val SKEL = Regex("""libQnnHtpV(\d+)Skel\.so""")
 
     private fun failed(reason: String) = DeviceProbe(
       ok = false,
