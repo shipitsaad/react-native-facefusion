@@ -1,5 +1,5 @@
 import Facefusion from './NativeFacefusion';
-import type { DetectedFace } from './NativeFacefusion';
+import type { DetectedFace, DetectOptions } from './NativeFacefusion';
 
 /**
  * Every face detected in the target at `targetPath` — a photo, or a video (its first
@@ -7,6 +7,9 @@ import type { DetectedFace } from './NativeFacefusion';
  * chosen face's box back as `targetFaceBox` in `SwapOptions`. Does not swap or modify
  * anything.
  */
-export function detectTargetFaces(targetPath: string): Promise<DetectedFace[]> {
-  return Facefusion.detectTargetFaces(targetPath);
+export function detectTargetFaces(
+  targetPath: string,
+  options?: DetectOptions
+): Promise<DetectedFace[]> {
+  return Facefusion.detectTargetFaces(targetPath, options);
 }

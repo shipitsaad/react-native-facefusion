@@ -126,12 +126,12 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun detectSourceFaces(sourcePath: String, promise: Promise) {
+  override fun detectSourceFaces(sourcePath: String, options: ReadableMap?, promise: Promise) {
     // On `worker`, same as swapPhoto -- a single-image detect pass is fast enough that it
     // doesn't need its own thread the way the minutes-long video job does.
     worker.execute {
       try {
-        val faces = SourceFaces.detect(reactApplicationContext, sourcePath, SwapConfig())
+        val faces = SourceFaces.detect(reactApplicationContext, sourcePath, swapConfig(options))
         promise.resolve(facesArray(faces))
       } catch (e: PipeGuard.Busy) {
         promise.reject("E_BUSY", e.message, e)
@@ -143,10 +143,10 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun detectTargetFaces(targetPath: String, promise: Promise) {
+  override fun detectTargetFaces(targetPath: String, options: ReadableMap?, promise: Promise) {
     worker.execute {
       try {
-        val faces = TargetFaces.detect(reactApplicationContext, targetPath, SwapConfig())
+        val faces = TargetFaces.detect(reactApplicationContext, targetPath, swapConfig(options))
         promise.resolve(facesArray(faces))
       } catch (e: PipeGuard.Busy) {
         promise.reject("E_BUSY", e.message, e)

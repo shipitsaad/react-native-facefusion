@@ -257,15 +257,38 @@ export default function App() {
     setDetectError(null);
   }, [sourcePath]);
 
+  // Zero faces is reported through the same banner as a real error, because to the person
+  // holding the phone it IS the failure -- the picker just does nothing otherwise, which
+  // reads as a broken build.
+  //
+  // The hint is not filler. Every tier ships the same yoloface graph, but compiled per
+  // Hexagon architecture, so the same photo scores differently on a v68 chip than on a
+  // v79 one, and `detectorScore` is a hard cutoff. A face at 0.46 on an S22 and 0.58 on an
+  // S25 is found on exactly one of them, which is precisely the "works on your phone, not
+  // on mine" report this text exists to answer.
+  const noFacesMessage = useCallback(
+    (what: string) =>
+      `No ${what} found at detector confidence ${detectorScore.toFixed(2)}. ` +
+      'Older chips score the same photo lower than newer ones, so try lowering ' +
+      '"Detector confidence" under Advanced to about 0.30 and detecting again.',
+    [detectorScore]
+  );
+
   const detectFaces = useCallback(() => {
     setDetectError(null);
     setSelectedFaceIndex(null);
     setDetectingFaces(true);
-    detectSourceFaces(sourcePath)
-      .then(setSourceFaces)
+    // `commonOptions`, not just the two thresholds: everything in it reaches the native
+    // pipeline through `initEx`, so detecting with a different set than the swap uses
+    // re-opens every model graph twice per swap.
+    detectSourceFaces(sourcePath, commonOptions)
+      .then((faces) => {
+        setSourceFaces(faces);
+        if (faces.length === 0) setDetectError(noFacesMessage('faces'));
+      })
       .catch((e: Error) => setDetectError(e.message))
       .finally(() => setDetectingFaces(false));
-  }, [sourcePath]);
+  }, [sourcePath, commonOptions, noFacesMessage]);
 
   // A detected-faces list belongs to one specific target -- stale results pointing at a
   // different photo would silently swap the wrong face.
@@ -279,11 +302,14 @@ export default function App() {
     setDetectTargetError(null);
     setSelectedTargetFaceIndex(null);
     setDetectingTargetFaces(true);
-    detectTargetFaces(targetPath)
-      .then(setTargetFaces)
+    detectTargetFaces(targetPath, commonOptions)
+      .then((faces) => {
+        setTargetFaces(faces);
+        if (faces.length === 0) setDetectTargetError(noFacesMessage('faces'));
+      })
       .catch((e: Error) => setDetectTargetError(e.message))
       .finally(() => setDetectingTargetFaces(false));
-  }, [targetPath]);
+  }, [targetPath, commonOptions, noFacesMessage]);
 
   useEffect(() => {
     setVideoTargetFaces([]);
@@ -295,11 +321,16 @@ export default function App() {
     setDetectVideoTargetError(null);
     setSelectedVideoTargetFaceIndex(null);
     setDetectingVideoTargetFaces(true);
-    detectTargetFaces(videoTargetPath)
-      .then(setVideoTargetFaces)
+    detectTargetFaces(videoTargetPath, commonOptions)
+      .then((faces) => {
+        setVideoTargetFaces(faces);
+        if (faces.length === 0) {
+          setDetectVideoTargetError(noFacesMessage('faces in the first frame'));
+        }
+      })
       .catch((e: Error) => setDetectVideoTargetError(e.message))
       .finally(() => setDetectingVideoTargetFaces(false));
-  }, [videoTargetPath]);
+  }, [videoTargetPath, commonOptions, noFacesMessage]);
 
   const runProbe = useCallback(() => {
     setProbing(true);

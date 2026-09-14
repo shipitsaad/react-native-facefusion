@@ -111,6 +111,36 @@ export type SwapOptions = {
   targetFps?: number;
 };
 
+/**
+ * Tunable knobs for a detect-only pass — the same two thresholds {@link SwapOptions}
+ * carries, and they mean exactly the same thing.
+ *
+ * **Pass the same values here that you pass to the swap.** Two reasons. The obvious one is
+ * that a face picker which finds a face the following swap then rejects is a picker that
+ * lies. The non-obvious one is cost: these thresholds reach the native pipeline through
+ * `initEx`, so changing one re-opens every model graph. Detecting at the defaults and then
+ * swapping at your own values pays that reload twice per swap.
+ *
+ * Lowering {@link detectorScore} is the fix for "it finds the face on one phone and not on
+ * another with the same photo" — see the note on that field.
+ */
+export type DetectOptions = {
+  /**
+   * Minimum detector confidence to count as a face, `0..1`. Default `0.5`, which is
+   * upstream FaceFusion's own default.
+   *
+   * **This is the knob that differs by chip.** Every tier ships the same 4.0 MB yoloface
+   * graph, but as a *separately compiled* QNN context binary per Hexagon architecture, so
+   * the same photo scores differently on a v68 chip than on a v79 one. The cutoff is hard
+   * (`score <= detectorScore` is dropped outright), so a face scoring 0.46 on an older
+   * chip and 0.58 on a newer one is found on exactly one of them. Offer this as a control
+   * rather than treating "no faces" as final; ~0.3 recovers most of the gap.
+   */
+  detectorScore?: number;
+  /** Minimum landmarker confidence, `0..1`. Default `0.5`. */
+  landmarkerScore?: number;
+};
+
 /** One face found in a source photo, in the image's own pixel coordinates. */
 export type DetectedFace = {
   left: number;
@@ -253,7 +283,10 @@ export interface Spec extends TurboModule {
    * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
    * required models are not on disk yet, and `E_DETECT` otherwise.
    */
-  detectSourceFaces(sourcePath: string): Promise<DetectedFace[]>;
+  detectSourceFaces(
+    sourcePath: string,
+    options?: DetectOptions
+  ): Promise<DetectedFace[]>;
   /**
    * Every face detected in the target at `targetPath` — a photo, or a video (its first
    * frame, already upright) — for a UI to let the user pick one before swapping. Pass the
@@ -263,7 +296,10 @@ export interface Spec extends TurboModule {
    * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
    * required models are not on disk yet, and `E_DETECT` otherwise.
    */
-  detectTargetFaces(targetPath: string): Promise<DetectedFace[]>;
+  detectTargetFaces(
+    targetPath: string,
+    options?: DetectOptions
+  ): Promise<DetectedFace[]>;
   /**
    * Copies the file at `path` — a `swapPhoto`/`swapVideo` output, typically — into the
    * system's Photos/Gallery app, under a `Facefusion` album. Returns the resulting

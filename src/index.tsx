@@ -17,6 +17,7 @@ export type {
   ModelStatus,
   ModelDownloadProgress,
   SwapOptions,
+  DetectOptions,
   SwapPhotoResult,
   SwapVideoResult,
   VideoSwapProgress,

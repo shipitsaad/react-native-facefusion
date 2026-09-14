@@ -1,5 +1,5 @@
 import Facefusion from './NativeFacefusion';
-import type { DetectedFace } from './NativeFacefusion';
+import type { DetectedFace, DetectOptions } from './NativeFacefusion';
 
 /**
  * Every face detected in the photo at `sourcePath`, for a UI to let the user pick one
@@ -9,6 +9,9 @@ import type { DetectedFace } from './NativeFacefusion';
  * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
  * required models are not on disk yet, and `E_DETECT` otherwise.
  */
-export function detectSourceFaces(sourcePath: string): Promise<DetectedFace[]> {
-  return Facefusion.detectSourceFaces(sourcePath);
+export function detectSourceFaces(
+  sourcePath: string,
+  options?: DetectOptions
+): Promise<DetectedFace[]> {
+  return Facefusion.detectSourceFaces(sourcePath, options);
 }

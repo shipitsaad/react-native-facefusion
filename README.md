@@ -148,8 +148,11 @@ const videoResult = await swapVideo(sourcePath, targetPath, outputPath, {
 
 // Multiple faces in the source or target? Detect first, let the user pick, then pass
 // the chosen box back into swapPhoto/swapVideo as sourceFaceBox / targetFaceBox.
-const sourceFaces = await detectSourceFaces(sourcePath);
-const targetFaces = await detectTargetFaces(targetPath);
+// Pass the SAME options you pass to the swap. A picker that finds a face the swap then
+// rejects is a picker that lies -- and these thresholds reach the pipeline through its
+// init, so detecting at different values re-opens every model graph twice per swap.
+const sourceFaces = await detectSourceFaces(sourcePath, { detectorScore: 0.5 });
+const targetFaces = await detectTargetFaces(targetPath, { detectorScore: 0.5 });
 
 // Copy an output into the Photos app -- swapPhoto/swapVideo write to your own
 // app's private storage, not somewhere the user can see without this.
@@ -201,6 +204,23 @@ aggregate 10% rate, and the native-error-means-refusal path.
   once, so an uncapped 50 MP photo — the main camera on the phones this library
   requires — needs ~950 MB and cannot run at all. Videos are unaffected; they process
   at the clip's own resolution.
+- **The same photo can be detected on one chip and not on another.** Every tier ships the
+  same 4.0 MB `yoloface` detector, but as a *separately compiled QNN context binary per
+  Hexagon architecture* — the weights are identical, the compiled graph is not. The same
+  face therefore scores differently on a v68 chip than on a v79 one, and `detectorScore`
+  is a hard cutoff (`score <= detectorScore` is dropped outright), so a face scoring 0.46
+  on a Snapdragon 8 Gen 1 and 0.58 on an 8 Elite is found on exactly one of the two.
+  Observed 2026-09-14: the same photo detected and swapped on an S25 (tier v79) and was
+  not detected on an S22 (tier v68); other photos worked on both.
+
+  This is not something the library can normalise away — there is no per-tier calibration
+  to apply and no ground truth on the device to calibrate against. What it does instead is
+  make the threshold reachable: `detectorScore` is an option on `swapPhoto`, `swapVideo`,
+  `detectSourceFaces` and `detectTargetFaces` alike. **Expose it in your UI rather than
+  treating an empty detection result as final** — around `0.3` recovers most of the gap,
+  at the cost of more false positives on busy backgrounds. The example app shows the
+  pattern: zero faces is reported with the current threshold named, not as silence.
+
 - **Qualcomm's Hexagon skel libraries are not 16 KB page-size aligned.** Android 15+ warns when
   an APK contains a native library aligned to the old 4 KB page assumption. Measured
   across all 25 libraries in a release build: 19 are aligned correctly, including this
