@@ -17,6 +17,7 @@
     "lib",
     "android",
     "scripts/fetch-upstream.sh",
+    "scripts/check-tarball.sh",
     "patches",
     "third_party/facefusion-mobile/NOTICE",
     "!android/src/main/jniLibs",
@@ -37,7 +38,8 @@
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
     "typecheck": "tsc",
-    "lint": "eslint \"**/*.{js,ts,tsx}\""
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "prepublishOnly": "./scripts/check-tarball.sh"
   },
   "keywords": [
     "react-native",
