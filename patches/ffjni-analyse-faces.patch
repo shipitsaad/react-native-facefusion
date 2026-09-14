@@ -1,6 +1,6 @@
---- ffjni.cpp	2026-08-30 21:58:53
-+++ ffjni.cpp	2026-08-30 21:59:05
-@@ -236,6 +236,42 @@
+--- ffjni.cpp
++++ ffjni.cpp
+@@ -236,6 +236,60 @@
    if (!faces.empty())
      env->SetByteArrayRegion(jBgr, 0, (jsize)img.data.size(), (const jbyte*)img.data.data());
    return (jint)faces.size();
@@ -27,7 +27,25 @@
 +    return nullptr;
 +  }
 +  env->GetByteArrayRegion(jBgr, 0, (jsize)img.data.size(), (jbyte*)img.data.data());
++
++  // A detector graph that FAILED TO EXECUTE and a frame with genuinely no face both
++  // come back as an empty vector.  Pipeline::setSource carries a comment saying exactly
++  // that -- "reporting the second when it was the first sends the next hour in the wrong
++  // place" -- and the first version of this export ignored it, returning an empty array
++  // either way.  A real detector failure therefore reached the user as "no faces found",
++  // with nothing in logcat, which is precisely what happened on a v69 phone on
++  // 2026-09-14 and cost a remote debugging round trip.
++  //
++  // analyse() does not clear error() on entry, so a non-empty string is not on its own
++  // proof that THIS call failed; compare against what was already there.
++  const std::string errBefore = g_pipe->error();
 +  auto faces = g_pipe->analyse(img);
++  const std::string& errAfter = g_pipe->error();
++  if (faces.empty() && !errAfter.empty() && errAfter != errBefore) {
++    g_err = errAfter;
++    return nullptr;
++  }
++
 +  std::vector<float> out;
 +  out.reserve(faces.size() * 5);
 +  for (auto& f : faces) {
