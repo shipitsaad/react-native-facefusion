@@ -16,6 +16,7 @@
     "src",
     "lib",
     "android",
+    "TROUBLESHOOTING.md",
     "scripts/fetch-upstream.sh",
     "scripts/check-tarball.sh",
     "patches",
@@ -37,6 +38,7 @@
     "example": "npm run --workspace=example",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
+    "postinstall": "./scripts/fetch-upstream.sh || echo 'react-native-facefusion: could not auto-fetch the upstream C++ engine (see the error above). Run ./node_modules/react-native-facefusion/scripts/fetch-upstream.sh by hand before building Android -- most likely cause is no network/git at install time.'",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "prepublishOnly": "./scripts/check-tarball.sh"

@@ -1,8 +1,22 @@
 # react-native-facefusion
 
+[![npm version](https://img.shields.io/npm/v/react-native-facefusion.svg)](https://www.npmjs.com/package/react-native-facefusion)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![platform: android](https://img.shields.io/badge/platform-android-3ddc84.svg)](#requirements--read-this-first)
+
 A React Native TurboModule that runs face swapping **entirely on the phone**, on
 Qualcomm's Hexagon NPU. No server, no upload, no network call for inference — the
 photo or video never leaves the device.
+
+```ts
+import { swapPhoto } from 'react-native-facefusion';
+
+const result = await swapPhoto(sourcePath, targetPath, outputPath);
+// { outputPath, faceCount, tier } -- inference ran on the phone's NPU, offline.
+```
+
+That's the shape of it. Whether it'll actually run on a given phone depends on the
+chip — read the requirements below before installing; they're not boilerplate.
 
 ## Requirements — read this first
 
@@ -22,22 +36,44 @@ photo or video never leaves the device.
 - **A one-time native SDK step at install**, described below. It cannot be skipped
   and it cannot be bundled into this package — see [Install](#install).
 
+**Check a specific device before going further** — `probeDevice()` answers this at
+runtime, so you don't have to guess from a spec sheet:
+
+```ts
+import { probeDevice } from 'react-native-facefusion';
+
+const device = await probeDevice();
+console.log(device); // { ok, tier, tierChain, arch, vtcmMb, socModel, ... }
+// ok: false means this exact phone cannot run the NPU path -- not a crash, an answer.
+```
+
+This still needs the SDK step below to build at all; it's here so you know what to
+expect before spending time on that step.
+
 ## Install
 
-Three steps, not one — a plain `npm install` is not enough on its own.
+Two manual steps, not one — a plain `npm install` gets you most of the way, not
+all of it.
 
 ```sh
 npm install react-native-facefusion
 ```
 
 ```sh
-# 1. Fetch the upstream C++ engine this module wraps. Not committed to this repo or
-#    to the npm package — see "Why the extra steps" below.
+# Step 1 (fetching the upstream C++ engine) now runs AUTOMATICALLY as a postinstall --
+# nothing to do here in the common case. It's shown below only for when it's needed by
+# hand: your install had no network/git available (the postinstall warns rather than
+# failing your whole `npm install` when that happens), or scripts are disabled
+# (`npm ci --ignore-scripts`, some CI/lockfile-security setups). Not committed to this
+# repo or to the npm package either way — see "Why the extra steps" below.
 ./node_modules/react-native-facefusion/scripts/fetch-upstream.sh
 ```
 
 ```sh
-# 2. Get Qualcomm's QAIRT SDK (Community edition — a plain ZIP, no account needed):
+# Step 2 -- still manual, and can't be automated the same way: it's a real download
+# from Qualcomm's own site, not a script fetching a public git repo.
+#
+# Get Qualcomm's QAIRT SDK (Community edition — a plain ZIP, no account needed):
 #    https://www.qualcomm.com/developer/software/qualcomm-ai-runtime-sdk-qairt
 #
 # Copy out of the ZIP into THIS PACKAGE's directory (not your app's) -- CMake resolves
@@ -60,10 +96,13 @@ npm install react-native-facefusion
 # models arrive pre-compiled, so it is exactly the step this never performs.
 ```
 
-**Script steps 1 and 2.** Both write into `node_modules/`, so a fresh `npm install`
-or `npm ci` wipes them. Put them in a checked-in setup script (or a `postinstall`)
-rather than running them by hand once and forgetting — a CI machine or a new
-teammate's clone will otherwise fail at CMake configure with a message naming the
+**Both steps write into `node_modules/`, so a fresh `npm install` or `npm ci` wipes
+them out again.** Step 1 now re-runs itself automatically every time (it's this
+package's own `postinstall`), so a clean clone or CI machine gets it for free. Step
+2 does not and cannot — it's a manual download from Qualcomm, not something this
+package's install can reach out and fetch — so put IT in your own checked-in setup
+script if you want a new teammate's clone or CI machine to get it without a manual
+step. Skip it and a fresh clone fails at CMake configure with a message naming the
 missing piece.
 
 **Your app's `android/build.gradle` needs `minSdkVersion = 31`.** A fresh React Native
@@ -197,6 +236,11 @@ was written (2026-09-11). Not yet exercised on hardware: a video refused on the
 aggregate 10% rate, and the native-error-means-refusal path.
 
 ## Known issues
+
+Hitting an actual error (a QNN error code, a manifest merge failure, a decode
+failure) rather than a documented limitation below? See
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md) first — it's real errors from this
+project's own history, most of them more misleading than they look.
 
 - **A photo swap's output is capped at 2560 px on the long edge** (and a source photo
   is subsampled to 1920, which costs nothing — it only contributes an identity, never
