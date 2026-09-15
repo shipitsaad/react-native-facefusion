@@ -10,6 +10,7 @@ import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class FacefusionModule(reactContext: ReactApplicationContext) :
@@ -170,8 +171,15 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
       return
     }
     videoWorker.execute {
-      VideoSwapService.start(reactApplicationContext)
       try {
+        // Must be inside the try: on minSdk 31+, starting a foreground service from
+        // outside a foreground/allowed context throws
+        // ForegroundServiceStartNotAllowedException. Outside this try that exception had
+        // nowhere to go but off this Runnable entirely -- `promise` never settled (the JS
+        // call hung forever) and the `finally` below never ran, so `videoBusy` stayed
+        // `true` and every later swapVideo() call rejected E_BUSY for the rest of the
+        // process's life.
+        VideoSwapService.start(reactApplicationContext)
         val result = VideoSwap.run(
           reactApplicationContext, sourcePath, targetPath, outputPath, swapConfig(options),
           sourceFaceBox(options), targetFaceBox(options), targetFps(options),
@@ -232,13 +240,28 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
   }
 
   override fun invalidate() {
+    // Cooperative cancellation first, so anything already running on `worker`/`videoWorker`
+    // gets to the next `throwIfCancelled()` check and exits quickly instead of running its
+    // full course.
     ModelDownload.cancel()
     VideoSwap.cancel()
-    NativePipe.release()
+
+    // `shutdown()` alone only stops NEW submissions -- a processFrame()/initEx() call
+    // already in flight keeps running on its own thread afterwards. `NativePipe.release()`
+    // used to run right after `shutdown()` with nothing in between, so a job that was
+    // mid-call when the module got invalidated (a JS reload while a swap is running, say)
+    // could still be touching `g_pipe` in native code the instant it was freed -- a
+    // use-after-free, which shows up as a native crash, not a catchable Kotlin exception.
+    // Waiting for real termination first closes that gap; the two executors that never
+    // touch `g_pipe` (`downloader`, `gallery`) don't need the same wait.
     worker.shutdown()
-    downloader.shutdown()
     videoWorker.shutdown()
+    downloader.shutdown()
     gallery.shutdown()
+    worker.awaitTermination(10, TimeUnit.SECONDS)
+    videoWorker.awaitTermination(10, TimeUnit.SECONDS)
+
+    NativePipe.release()
     super.invalidate()
   }
 

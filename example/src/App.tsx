@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -250,8 +250,12 @@ export default function App() {
   );
 
   // A detected-faces list belongs to one specific photo — stale results pointing at a
-  // different image would silently swap the wrong face in.
+  // different image would silently swap the wrong face in. Bumped here and checked in
+  // detectFaces()'s .then() -- a detect started against the old path can still be
+  // in flight when the path changes, and its result must not land on the new one.
+  const sourceFacesGeneration = useRef(0);
   useEffect(() => {
+    sourceFacesGeneration.current += 1;
     setSourceFaces([]);
     setSelectedFaceIndex(null);
     setDetectError(null);
@@ -275,6 +279,8 @@ export default function App() {
   );
 
   const detectFaces = useCallback(() => {
+    // Captured now, checked when the promise settles -- see sourceFacesGeneration above.
+    const generation = sourceFacesGeneration.current;
     setDetectError(null);
     setSelectedFaceIndex(null);
     setDetectingFaces(true);
@@ -283,53 +289,83 @@ export default function App() {
     // re-opens every model graph twice per swap.
     detectSourceFaces(sourcePath, commonOptions)
       .then((faces) => {
+        if (sourceFacesGeneration.current !== generation) return; // sourcePath moved on
         setSourceFaces(faces);
         if (faces.length === 0) setDetectError(noFacesMessage('faces'));
       })
-      .catch((e: Error) => setDetectError(e.message))
-      .finally(() => setDetectingFaces(false));
+      .catch((e: Error) => {
+        if (sourceFacesGeneration.current !== generation) return;
+        setDetectError(e.message);
+      })
+      .finally(() => {
+        if (sourceFacesGeneration.current === generation)
+          setDetectingFaces(false);
+      });
   }, [sourcePath, commonOptions, noFacesMessage]);
 
   // A detected-faces list belongs to one specific target -- stale results pointing at a
-  // different photo would silently swap the wrong face.
+  // different photo would silently swap the wrong face. Same guard shape as
+  // sourceFacesGeneration above.
+  const targetFacesGeneration = useRef(0);
   useEffect(() => {
+    targetFacesGeneration.current += 1;
     setTargetFaces([]);
     setSelectedTargetFaceIndex(null);
     setDetectTargetError(null);
   }, [targetPath]);
 
   const detectTargetFacesForPhoto = useCallback(() => {
+    const generation = targetFacesGeneration.current;
     setDetectTargetError(null);
     setSelectedTargetFaceIndex(null);
     setDetectingTargetFaces(true);
     detectTargetFaces(targetPath, commonOptions)
       .then((faces) => {
+        if (targetFacesGeneration.current !== generation) return;
         setTargetFaces(faces);
         if (faces.length === 0) setDetectTargetError(noFacesMessage('faces'));
       })
-      .catch((e: Error) => setDetectTargetError(e.message))
-      .finally(() => setDetectingTargetFaces(false));
+      .catch((e: Error) => {
+        if (targetFacesGeneration.current !== generation) return;
+        setDetectTargetError(e.message);
+      })
+      .finally(() => {
+        if (targetFacesGeneration.current === generation)
+          setDetectingTargetFaces(false);
+      });
   }, [targetPath, commonOptions, noFacesMessage]);
 
+  // Same guard shape as sourceFacesGeneration/targetFacesGeneration above.
+  const videoTargetFacesGeneration = useRef(0);
   useEffect(() => {
+    videoTargetFacesGeneration.current += 1;
     setVideoTargetFaces([]);
     setSelectedVideoTargetFaceIndex(null);
     setDetectVideoTargetError(null);
   }, [videoTargetPath]);
 
   const detectTargetFacesForVideo = useCallback(() => {
+    const generation = videoTargetFacesGeneration.current;
     setDetectVideoTargetError(null);
     setSelectedVideoTargetFaceIndex(null);
     setDetectingVideoTargetFaces(true);
     detectTargetFaces(videoTargetPath, commonOptions)
       .then((faces) => {
+        if (videoTargetFacesGeneration.current !== generation) return;
         setVideoTargetFaces(faces);
         if (faces.length === 0) {
           setDetectVideoTargetError(noFacesMessage('faces in the first frame'));
         }
       })
-      .catch((e: Error) => setDetectVideoTargetError(e.message))
-      .finally(() => setDetectingVideoTargetFaces(false));
+      .catch((e: Error) => {
+        if (videoTargetFacesGeneration.current !== generation) return;
+        setDetectVideoTargetError(e.message);
+      })
+      .finally(() => {
+        if (videoTargetFacesGeneration.current === generation) {
+          setDetectingVideoTargetFaces(false);
+        }
+      });
   }, [videoTargetPath, commonOptions, noFacesMessage]);
 
   const runProbe = useCallback(() => {
