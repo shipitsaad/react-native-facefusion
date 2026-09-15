@@ -182,6 +182,13 @@ export default function App() {
   // this is the first UI for any of them. Defaults match SwapConfig's own Kotlin defaults.
   // Shared between the photo and video cards below, since both take the same SwapOptions.
   const [optionsExpanded, setOptionsExpanded] = useState(false);
+
+  // The raw file paths are still editable -- `adb push` + type the path is how this app
+  // gets tested -- but they are collapsed by default now that the pickers show a real
+  // thumbnail. A wall of /sdcard/Android/data/... strings was the first thing the screen
+  // showed, and it made a working app look like a debug harness.
+  const [pathsExpanded, setPathsExpanded] = useState(false);
+
   const [swapperWeight, setSwapperWeight] = useState(0.5);
   const [maskBlur, setMaskBlur] = useState(0.3);
   const [maskPadding, setMaskPadding] = useState(0); // one uniform value, all 4 sides
@@ -597,157 +604,125 @@ export default function App() {
             )}
 
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Photo</Text>
+              <Text style={styles.cardTitle}>Photo Swap</Text>
               <Text style={styles.hint}>
-                The face from step 1 replaces the face in step 2.
+                The face on the left replaces the face on the right.
               </Text>
 
-              <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>
-                  <Text style={styles.stepNumber}>1</Text> Source face
-                </Text>
-                <TouchableOpacity onPress={pickSource}>
-                  <Text style={styles.pickLink}>Choose photo…</Text>
-                </TouchableOpacity>
+              {/* The whole point of the screen, said in one row: this face goes into
+                  that photo. It used to be two labels over two paths, which showed
+                  neither what had been picked nor which direction the swap ran. */}
+              <View style={styles.pairRow}>
+                <MediaTile
+                  step="1"
+                  label="Source face"
+                  path={sourcePath}
+                  kind="image"
+                  onPress={pickSource}
+                />
+                <Text style={styles.pairArrow}>→</Text>
+                <MediaTile
+                  step="2"
+                  label="Target photo"
+                  path={targetPath}
+                  kind="image"
+                  onPress={pickTarget}
+                />
               </View>
-              <TextInput
-                style={styles.input}
-                value={sourcePath}
-                onChangeText={setSourcePath}
-                placeholder="Tap “Choose photo…” — the face to copy from"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
 
               {/* ===== Source face picker — which face is the identity, when the
                   source photo has more than one. See ADR-0012. ===== */}
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={detectFaces}
-                disabled={detectingFaces || !isReady}
-              >
-                {detectingFaces ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>
-                    Detect Faces in Source
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {detectError != null && (
-                <Text style={styles.errorText}>{detectError}</Text>
-              )}
-
-              {sourceFaces.length > 0 && (
-                <View style={styles.faceList}>
-                  <TouchableOpacity
-                    style={[
-                      styles.facePill,
-                      selectedFaceIndex === null && styles.facePillSelected,
-                    ]}
-                    onPress={() => setSelectedFaceIndex(null)}
-                  >
-                    <Text style={styles.facePillText}>Largest (default)</Text>
-                  </TouchableOpacity>
-                  {sourceFaces.map((face, i) => (
+              {sourcePath.trim() !== '' && (
+                <View style={styles.pickerBlock}>
+                  <View style={styles.pickerHeader}>
+                    <Text style={styles.pickerTitle}>Face to copy</Text>
                     <TouchableOpacity
-                      key={i}
-                      style={[
-                        styles.facePill,
-                        selectedFaceIndex === i && styles.facePillSelected,
-                      ]}
-                      onPress={() => setSelectedFaceIndex(i)}
+                      onPress={detectFaces}
+                      disabled={detectingFaces || !isReady}
                     >
-                      <Text style={styles.facePillText}>
-                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
-                      </Text>
+                      {detectingFaces ? (
+                        <ActivityIndicator size="small" color="#0a84ff" />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.pickLink,
+                            !isReady && styles.pickLinkDisabled,
+                          ]}
+                        >
+                          {sourceFaces.length > 0 ? 'Detect again' : 'Detect'}
+                        </Text>
+                      )}
                     </TouchableOpacity>
-                  ))}
+                  </View>
+
+                  {detectError != null && (
+                    <Text style={styles.errorText}>{detectError}</Text>
+                  )}
+
+                  {sourceFaces.length > 0 ? (
+                    <FaceStrip
+                      path={sourcePath}
+                      faces={sourceFaces}
+                      selected={selectedFaceIndex}
+                      onSelect={setSelectedFaceIndex}
+                      defaultLabel="Largest"
+                    />
+                  ) : (
+                    detectError == null && (
+                      <Text style={styles.pickerEmpty}>
+                        Optional — the largest face is used unless you pick one.
+                      </Text>
+                    )
+                  )}
                 </View>
               )}
-
-              <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>
-                  <Text style={styles.stepNumber}>2</Text> Target photo
-                </Text>
-                <TouchableOpacity onPress={pickTarget}>
-                  <Text style={styles.pickLink}>Choose photo…</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={styles.input}
-                value={targetPath}
-                onChangeText={setTargetPath}
-                placeholder="Tap “Choose photo…” — the photo to change"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
 
               {/* ===== Target face picker — which face in targetPath actually gets
                   swapped, when it has more than one. See ADR-0014. ===== */}
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={detectTargetFacesForPhoto}
-                disabled={detectingTargetFaces || !isReady}
-              >
-                {detectingTargetFaces ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>
-                    Detect Faces in Target
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {detectTargetError != null && (
-                <Text style={styles.errorText}>{detectTargetError}</Text>
-              )}
-
-              {targetFaces.length > 0 && (
-                <View style={styles.faceList}>
-                  <TouchableOpacity
-                    style={[
-                      styles.facePill,
-                      selectedTargetFaceIndex === null &&
-                        styles.facePillSelected,
-                    ]}
-                    onPress={() => setSelectedTargetFaceIndex(null)}
-                  >
-                    <Text style={styles.facePillText}>
-                      Every face (default)
-                    </Text>
-                  </TouchableOpacity>
-                  {targetFaces.map((face, i) => (
+              {targetPath.trim() !== '' && (
+                <View style={styles.pickerBlock}>
+                  <View style={styles.pickerHeader}>
+                    <Text style={styles.pickerTitle}>Face to replace</Text>
                     <TouchableOpacity
-                      key={i}
-                      style={[
-                        styles.facePill,
-                        selectedTargetFaceIndex === i &&
-                          styles.facePillSelected,
-                      ]}
-                      onPress={() => setSelectedTargetFaceIndex(i)}
+                      onPress={detectTargetFacesForPhoto}
+                      disabled={detectingTargetFaces || !isReady}
                     >
-                      <Text style={styles.facePillText}>
-                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
-                      </Text>
+                      {detectingTargetFaces ? (
+                        <ActivityIndicator size="small" color="#0a84ff" />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.pickLink,
+                            !isReady && styles.pickLinkDisabled,
+                          ]}
+                        >
+                          {targetFaces.length > 0 ? 'Detect again' : 'Detect'}
+                        </Text>
+                      )}
                     </TouchableOpacity>
-                  ))}
+                  </View>
+
+                  {detectTargetError != null && (
+                    <Text style={styles.errorText}>{detectTargetError}</Text>
+                  )}
+
+                  {targetFaces.length > 0 ? (
+                    <FaceStrip
+                      path={targetPath}
+                      faces={targetFaces}
+                      selected={selectedTargetFaceIndex}
+                      onSelect={setSelectedTargetFaceIndex}
+                      defaultLabel="All faces"
+                    />
+                  ) : (
+                    detectTargetError == null && (
+                      <Text style={styles.pickerEmpty}>
+                        Optional — every face is swapped unless you pick one.
+                      </Text>
+                    )
+                  )}
                 </View>
               )}
-
-              <Text style={styles.inputLabel}>Output file</Text>
-              <TextInput
-                style={styles.input}
-                value={outputPath}
-                onChangeText={setOutputPath}
-                placeholder="where to write the result"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
 
               <TouchableOpacity
                 style={[
@@ -769,6 +744,54 @@ export default function App() {
 
               {photoBlocker != null && !swapping && (
                 <Text style={styles.blockerText}>{photoBlocker}</Text>
+              )}
+
+              {/* The paths are still here and still editable -- `adb push` then typing a
+                  path is how this gets tested -- just no longer the first thing the
+                  screen shows. */}
+              <TouchableOpacity
+                style={styles.pathsToggle}
+                onPress={() => setPathsExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pathsToggleText}>
+                  {pathsExpanded ? 'Hide file paths ▲' : 'Edit file paths ▼'}
+                </Text>
+              </TouchableOpacity>
+
+              {pathsExpanded && (
+                <View>
+                  <Text style={styles.inputLabel}>Source</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={sourcePath}
+                    onChangeText={setSourcePath}
+                    placeholder="the face to copy from"
+                    placeholderTextColor="#636366"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Text style={styles.inputLabel}>Target</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={targetPath}
+                    onChangeText={setTargetPath}
+                    placeholder="the photo to change"
+                    placeholderTextColor="#636366"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Text style={styles.inputLabel}>Output file</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={outputPath}
+                    onChangeText={setOutputPath}
+                    placeholder="where to write the result"
+                    placeholderTextColor="#636366"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
               )}
             </View>
 
@@ -792,18 +815,27 @@ export default function App() {
 
             {swapResult != null && (
               <View style={styles.card}>
-                <View style={styles.resultMetaRow}>
-                  <Text style={styles.resultMetaText}>
-                    Faces:{' '}
-                    <Text style={styles.resultBold}>
-                      {swapResult.faceCount}
+                <View style={styles.cardHeaderRow}>
+                  <Text style={styles.cardTitle}>Result</Text>
+                  <View style={styles.resultChips}>
+                    <Text style={styles.resultChip}>
+                      {swapResult.faceCount}{' '}
+                      {swapResult.faceCount === 1 ? 'face' : 'faces'}
                     </Text>
-                  </Text>
-                  <Text style={styles.resultMetaText}>
-                    Tier:{' '}
-                    <Text style={styles.resultBold}>{swapResult.tier}</Text>
-                  </Text>
+                    <Text style={styles.resultChip}>{swapResult.tier}</Text>
+                  </View>
                 </View>
+
+                <View style={[styles.previewContainer, styles.resultFrame]}>
+                  <Image
+                    style={styles.resultImage}
+                    source={{
+                      uri: `file://${swapResult.outputPath}?v=${resultStamp}`,
+                    }}
+                    resizeMode="contain"
+                  />
+                </View>
+
                 <Text
                   style={styles.resultPathText}
                   numberOfLines={1}
@@ -811,16 +843,6 @@ export default function App() {
                 >
                   {swapResult.outputPath}
                 </Text>
-
-                <View style={styles.previewContainer}>
-                  <Image
-                    style={styles.previewImage}
-                    source={{
-                      uri: `file://${swapResult.outputPath}?v=${resultStamp}`,
-                    }}
-                    resizeMode="contain"
-                  />
-                </View>
 
                 {/* Copies outputPath (this app's own private storage) into MediaStore, so
                     it shows up in the Photos app and survives an uninstall. */}
@@ -862,93 +884,89 @@ export default function App() {
                 a while — roughly 10 frames a second at 720p.
               </Text>
 
-              <View style={styles.labelRow}>
-                <Text style={styles.inputLabel}>Target clip</Text>
-                <TouchableOpacity onPress={pickVideoTarget}>
-                  <Text style={styles.pickLink}>Choose video…</Text>
-                </TouchableOpacity>
+              {/* Same source face as the photo card -- shown, not just stated, because
+                  "the same source face from step 1" is invisible otherwise and a video
+                  swap is far too slow to discover a wrong pick at the end of. */}
+              <View style={styles.pairRow}>
+                <MediaTile
+                  step="1"
+                  label="Source face"
+                  path={sourcePath}
+                  kind="image"
+                  onPress={pickSource}
+                />
+                <Text style={styles.pairArrow}>→</Text>
+                <MediaTile
+                  step="2"
+                  label="Target clip"
+                  path={videoTargetPath}
+                  kind="video"
+                  onPress={pickVideoTarget}
+                />
               </View>
-              <TextInput
-                style={styles.input}
-                value={videoTargetPath}
-                onChangeText={setVideoTargetPath}
-                placeholder="Tap “Choose video…” — the clip to change"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
 
               {/* ===== Target face picker (video) — same idea as the photo one above,
                   detected from the clip's first frame. See ADR-0014. ===== */}
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={detectTargetFacesForVideo}
-                disabled={detectingVideoTargetFaces || !isReady}
-              >
-                {detectingVideoTargetFaces ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>
-                    Detect Faces in Target
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {detectVideoTargetError != null && (
-                <Text style={styles.errorText}>{detectVideoTargetError}</Text>
-              )}
-
-              {videoTargetFaces.length > 0 && (
-                <View style={styles.faceList}>
-                  <TouchableOpacity
-                    style={[
-                      styles.facePill,
-                      selectedVideoTargetFaceIndex === null &&
-                        styles.facePillSelected,
-                    ]}
-                    onPress={() => setSelectedVideoTargetFaceIndex(null)}
-                  >
-                    <Text style={styles.facePillText}>
-                      Every face (default)
-                    </Text>
-                  </TouchableOpacity>
-                  {videoTargetFaces.map((face, i) => (
+              {videoTargetPath.trim() !== '' && (
+                <View style={styles.pickerBlock}>
+                  <View style={styles.pickerHeader}>
+                    <Text style={styles.pickerTitle}>Face to replace</Text>
                     <TouchableOpacity
-                      key={i}
-                      style={[
-                        styles.facePill,
-                        selectedVideoTargetFaceIndex === i &&
-                          styles.facePillSelected,
-                      ]}
-                      onPress={() => setSelectedVideoTargetFaceIndex(i)}
+                      onPress={detectTargetFacesForVideo}
+                      disabled={detectingVideoTargetFaces || !isReady}
                     >
-                      <Text style={styles.facePillText}>
-                        Face {i + 1} — {(face.score * 100).toFixed(0)}%
-                      </Text>
+                      {detectingVideoTargetFaces ? (
+                        <ActivityIndicator size="small" color="#0a84ff" />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.pickLink,
+                            !isReady && styles.pickLinkDisabled,
+                          ]}
+                        >
+                          {videoTargetFaces.length > 0
+                            ? 'Detect again'
+                            : 'Detect'}
+                        </Text>
+                      )}
                     </TouchableOpacity>
-                  ))}
+                  </View>
+
+                  {detectVideoTargetError != null && (
+                    <Text style={styles.errorText}>
+                      {detectVideoTargetError}
+                    </Text>
+                  )}
+
+                  {videoTargetFaces.length > 0 ? (
+                    // No thumbnails here: these faces come from the clip's first frame,
+                    // and this app has no way to render a video frame into an <Image>.
+                    <FaceStrip
+                      path={null}
+                      faces={videoTargetFaces}
+                      selected={selectedVideoTargetFaceIndex}
+                      onSelect={setSelectedVideoTargetFaceIndex}
+                      defaultLabel="All faces"
+                    />
+                  ) : (
+                    detectVideoTargetError == null && (
+                      <Text style={styles.pickerEmpty}>
+                        Optional — every face is swapped unless you pick one.
+                      </Text>
+                    )
+                  )}
+
+                  {/* A locked box, not tracked frame to frame -- if the subject moves far
+                      out of it, that face silently stops being swapped. See ADR-0014. */}
+                  {selectedVideoTargetFaceIndex !== null && (
+                    <Text style={styles.pickerEmpty}>
+                      Locked to this face's position in the first frame — not
+                      re-detected per frame, so a subject who moves far out of
+                      it stops being swapped.
+                    </Text>
+                  )}
                 </View>
               )}
-              {/* A locked box, not tracked frame to frame -- if the subject moves far out
-                  of it, that face silently stops being swapped. See ADR-0014. */}
-              {selectedVideoTargetFaceIndex !== null && (
-                <Text style={styles.hint}>
-                  Locked to this face's position in the first frame — not
-                  re-detected per frame, so a subject who moves far out of it
-                  stops being swapped.
-                </Text>
-              )}
-
-              <Text style={styles.inputLabel}>Output Path</Text>
-              <TextInput
-                style={styles.input}
-                value={videoOutputPath}
-                onChangeText={setVideoOutputPath}
-                placeholder="output video path"
-                placeholderTextColor="#636366"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
 
               {/* ===== FPS cap — set before running the swap. Drops frames before they
                   ever reach the NPU or encoder, not after. See ADR-0014. ===== */}
@@ -996,6 +1014,42 @@ export default function App() {
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
+              )}
+
+              {/* Same collapsed-by-default treatment as the photo card's paths. */}
+              <TouchableOpacity
+                style={styles.pathsToggle}
+                onPress={() => setPathsExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pathsToggleText}>
+                  {pathsExpanded ? 'Hide file paths ▲' : 'Edit file paths ▼'}
+                </Text>
+              </TouchableOpacity>
+
+              {pathsExpanded && (
+                <View>
+                  <Text style={styles.inputLabel}>Target clip</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={videoTargetPath}
+                    onChangeText={setVideoTargetPath}
+                    placeholder="the clip to change"
+                    placeholderTextColor="#636366"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Text style={styles.inputLabel}>Output file</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={videoOutputPath}
+                    onChangeText={setVideoOutputPath}
+                    placeholder="output video path"
+                    placeholderTextColor="#636366"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
               )}
 
               {/* Live Preview -- one frame at a time, straight from VideoSwap.kt's own
@@ -1328,6 +1382,177 @@ export default function App() {
   );
 }
 
+/**
+ * One detected face, cropped out of the photo it was found in.
+ *
+ * There is no crop API in React Native core and this app has no image library, so the
+ * crop is done with layout instead: a fixed-size window with `overflow: 'hidden'`
+ * holding the whole photo, scaled up and shifted so the detector's box lands inside the
+ * window.
+ *
+ * This is the reason `DetectedFace` carries `imageWidth`/`imageHeight` at all. The box
+ * is in the *analysed bitmap's* coordinate space, which is not the file's pixel size --
+ * a photo is capped and subsampled before detection -- so the numbers are only
+ * meaningful as a ratio against those two. Scaling by that ratio means the same maths
+ * works whatever the file's real resolution is.
+ */
+function FaceThumb({
+  path,
+  face,
+  size,
+}: {
+  path: string;
+  face: DetectedFace;
+  size: number;
+}) {
+  // A window wider than the box itself. A tight crop on the detector's own box cuts the
+  // hairline and chin, and two faces cropped that tightly look far more alike than they
+  // are -- which defeats the point of showing them at all.
+  const window = Math.max(face.right - face.left, face.bottom - face.top) * 1.6;
+  const centerX = (face.left + face.right) / 2;
+  const centerY = (face.top + face.bottom) / 2;
+  const scale = size / window;
+
+  return (
+    <View style={[styles.faceThumb, { width: size, height: size }]}>
+      <Image
+        source={{ uri: `file://${path}` }}
+        // Geometry only -- it is computed per face and cannot live in a stylesheet.
+        style={[
+          styles.faceThumbImage,
+          {
+            width: face.imageWidth * scale,
+            height: face.imageHeight * scale,
+            left: (window / 2 - centerX) * scale,
+            top: (window / 2 - centerY) * scale,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+/**
+ * The face picker: the default option plus one tile per detected face.
+ *
+ * `path` is the photo the faces were found in — when it is null (a video, whose first
+ * frame this app has no way to render) the tiles fall back to numbered placeholders,
+ * which is what every picker in this app used to be.
+ */
+function FaceStrip({
+  path,
+  faces,
+  selected,
+  onSelect,
+  defaultLabel,
+}: {
+  path: string | null;
+  faces: DetectedFace[];
+  selected: number | null;
+  onSelect: (index: number | null) => void;
+  defaultLabel: string;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.faceStrip}
+    >
+      <TouchableOpacity
+        style={[
+          styles.faceOption,
+          selected === null && styles.faceOptionSelected,
+        ]}
+        onPress={() => onSelect(null)}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.faceThumb, styles.faceThumbAuto]}>
+          <Text style={styles.faceThumbAutoMark}>A</Text>
+        </View>
+        <Text style={styles.faceOptionLabel} numberOfLines={1}>
+          {defaultLabel}
+        </Text>
+      </TouchableOpacity>
+
+      {faces.map((face, i) => (
+        <TouchableOpacity
+          key={i}
+          style={[
+            styles.faceOption,
+            selected === i && styles.faceOptionSelected,
+          ]}
+          onPress={() => onSelect(i)}
+          activeOpacity={0.8}
+        >
+          {path != null ? (
+            <FaceThumb path={path} face={face} size={62} />
+          ) : (
+            <View style={[styles.faceThumb, styles.faceThumbAuto]}>
+              <Text style={styles.faceThumbAutoMark}>{i + 1}</Text>
+            </View>
+          )}
+          <Text style={styles.faceOptionLabel} numberOfLines={1}>
+            {(face.score * 100).toFixed(0)}%
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
+/**
+ * The source/target picker tile: the picked image itself, or an empty state that says
+ * what to do. Replaces a label + "Choose photo…" link + a raw path in a TextInput, which
+ * gave no confirmation of *what* had been picked -- the single most confusing thing about
+ * the old screen, since a wrong pick looked identical to a right one.
+ */
+function MediaTile({
+  step,
+  label,
+  path,
+  kind,
+  onPress,
+}: {
+  step: string;
+  label: string;
+  path: string;
+  kind: 'image' | 'video';
+  onPress: () => void;
+}) {
+  const filled = path.trim() !== '';
+  return (
+    <TouchableOpacity style={styles.tile} onPress={onPress} activeOpacity={0.8}>
+      <View style={styles.tileFrame}>
+        {filled && kind === 'image' ? (
+          <Image
+            source={{ uri: `file://${path}` }}
+            style={styles.tileImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.tileEmpty}>
+            <Text style={styles.tileEmptyMark}>{filled ? '▶' : '+'}</Text>
+            {filled && (
+              <Text style={styles.tileEmptyText} numberOfLines={1}>
+                {path.split('/').pop()}
+              </Text>
+            )}
+          </View>
+        )}
+      </View>
+      <View style={styles.tileCaption}>
+        <Text style={styles.tileStep}>{step}</Text>
+        <Text style={styles.tileLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+      <Text style={styles.tileAction}>
+        {filled ? 'Change' : kind === 'video' ? 'Choose video' : 'Choose photo'}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function Row({
   label,
   value,
@@ -1562,6 +1787,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
   },
+  pickLinkDisabled: {
+    color: '#48484a',
+  },
   input: {
     backgroundColor: '#2c2c2e',
     borderRadius: 8,
@@ -1680,6 +1908,31 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
   },
+  // The result deserves more room than a 200px strip -- it is the thing the whole
+  // screen exists to produce, and it was previously the same size as a progress preview.
+  resultFrame: {
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  resultImage: {
+    width: '100%',
+    height: 300,
+  },
+  resultChips: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  resultChip: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8e8e93',
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+    fontVariant: ['tabular-nums'],
+  },
   progressBox: {
     marginTop: 10,
   },
@@ -1735,25 +1988,159 @@ const styles = StyleSheet.create({
     minWidth: 56,
     textAlign: 'center',
   },
-  faceList: {
+  // ===== Source → target pair =====
+  pairRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 8,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  facePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
+  pairArrow: {
+    fontSize: 17,
+    color: '#636366',
+    fontWeight: '600',
+  },
+  tile: {
+    flex: 1,
+  },
+  tileFrame: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
     backgroundColor: '#2c2c2e',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3a3a3c',
   },
-  facePillSelected: {
-    backgroundColor: '#0a84ff',
+  tileImage: {
+    width: '100%',
+    height: '100%',
   },
-  facePillText: {
+  tileEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  tileEmptyMark: {
+    fontSize: 22,
+    color: '#636366',
+    fontWeight: '300',
+  },
+  tileEmptyText: {
+    fontSize: 10,
+    color: '#8e8e93',
+    textAlign: 'center',
+  },
+  tileCaption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 7,
+  },
+  tileStep: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0a84ff',
+    backgroundColor: 'rgba(10, 132, 255, 0.15)',
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    textAlign: 'center',
+    lineHeight: 15,
+    overflow: 'hidden',
+  },
+  tileLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: '#ffffff',
+    flexShrink: 1,
+  },
+  tileAction: {
+    fontSize: 11,
+    color: '#0a84ff',
+    fontWeight: '500',
+    marginTop: 1,
+  },
+
+  // ===== Face picker =====
+  pickerBlock: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#2c2c2e',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 20,
+  },
+  pickerTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  pickerEmpty: {
+    fontSize: 11,
+    color: '#636366',
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  faceStrip: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 10,
+    paddingBottom: 2,
+    paddingRight: 4,
+  },
+  faceOption: {
+    alignItems: 'center',
+    padding: 3,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    width: 72,
+  },
+  faceOptionSelected: {
+    borderColor: '#0a84ff',
+    backgroundColor: 'rgba(10, 132, 255, 0.12)',
+  },
+  faceOptionLabel: {
+    fontSize: 10,
+    color: '#8e8e93',
+    marginTop: 3,
+    fontVariant: ['tabular-nums'],
+  },
+  faceThumb: {
+    width: 62,
+    height: 62,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#2c2c2e',
+  },
+  faceThumbImage: {
+    position: 'absolute',
+  },
+  faceThumbAuto: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  faceThumbAutoMark: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#8e8e93',
+  },
+
+  // ===== Collapsed raw paths =====
+  pathsToggle: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  pathsToggleText: {
+    fontSize: 11,
+    color: '#636366',
+    fontWeight: '500',
   },
 });
