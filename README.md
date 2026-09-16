@@ -315,7 +315,22 @@ figure. Expect it to vary by device tier, resolution, and whether the enhancer r
 
 ## License
 
-MIT
+MIT for the code in this repository.
+
+Two things it depends on are not in this repository and are not MIT:
+
+- **The C++ engine this wraps** ([`AbrahamPaulJ/facefusion-mobile`](https://github.com/AbrahamPaulJ/facefusion-mobile))
+  ships no LICENSE file -- all rights reserved -- and is fetched at install time,
+  never committed here.
+- **What that engine itself wraps** is [FaceFusion](https://github.com/facefusion/facefusion)
+  by Henry Ruhs, licensed OpenRAIL-AS. That licence carries use-based restrictions --
+  among them, it prohibits impersonating people for deception and requires disclosing
+  machine-generated content -- and requires passing those restrictions to anyone this
+  is redistributed to. See [`third_party/facefusion-mobile/NOTICE`](third_party/facefusion-mobile/NOTICE).
+
+This project's content gate is its own attempt at part of that list; it has not been
+checked against the rest. If you're building on this for anything beyond trying it
+out, read the OpenRAIL-AS terms yourself -- nothing here is legal advice.
 
 ---
 

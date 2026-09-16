@@ -47,3 +47,38 @@ on your own machine, which is a clone you are already entitled to make.
 
 If upstream grants a licence, un-ignore `cpp/`, commit it with the licence text beside
 this file, and delete this paragraph. See `docs/05-licensing.md` §1.
+
+## Upstream's own upstream: FaceFusion (Henry Ruhs), OpenRAIL-AS
+
+`facefusion-mobile` is itself a port, by its own account. Its README says: "This is a
+mobile port of FaceFusion by Henry Ruhs. The pipeline, the models, and the option
+names, defaults and ranges are FaceFusion's." And in its own licensing section: "Built
+on FaceFusion, licensed OpenRAIL-AS, which carries use restrictions. Read the licence
+before using, modifying or redistributing this."
+
+FaceFusion's licence (github.com/facefusion/facefusion/blob/master/LICENSE.md, ©
+Henry Ruhs) names itself "OpenRAIL-AS" without inlining the text -- it incorporates
+the RAIL Initiative's OpenRAIL-S template by reference. The part that matters here is
+the use-based restrictions (Attachment A of that template), and they are explicitly
+**not just upstream's problem to enforce**: the licence requires "notice to subsequent
+users You Distribute to, that the Source Code is subject to" those restrictions, and
+requires them "included as an enforceable provision" wherever this is redistributed.
+
+Quoted from the template, the restrictions prohibit use: in any way that violates
+applicable law; "for the purpose of exploiting, Harming or attempting to exploit or
+Harm minors"; "to generate or disseminate false information with the purpose of
+Harming others"; "to generate or disseminate personal identifiable information that
+can be used to Harm an individual"; "to defame, disparage or otherwise harass
+others"; on the basis of "legally protected characteristics or categories"; "to
+impersonate or attempt to impersonate human beings for purposes of deception"; and,
+a transparency clause, "to generate or disseminate machine-generated ... content in
+any medium without expressly and intelligibly disclaiming that it is
+machine-generated."
+
+**This is why `ContentGate.kt` exists on the public API path (CLAUDE.md rule 5)** --
+it is this project's attempt at the NSFW slice of that list. It has not been checked
+against the rest. Impersonation-for-deception and the machine-generated-content
+disclosure both bear directly on a face-swap tool, and neither is currently enforced
+or disclosed anywhere in this repository, the README, or the example app's output.
+That gap should close before this project calls itself compliant with the licence it
+is two hops downstream of.
