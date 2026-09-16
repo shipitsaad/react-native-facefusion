@@ -596,15 +596,16 @@ function AppScreen() {
   // Why "Run Swap" is unavailable, in the user's words. A dimmed button with no
   // explanation is the worst state a first-time user can land in -- they cannot tell
   // a missing 317 MB download apart from an unpicked file. `null` means good to go.
-  const blocker = policyAcknowledged !== true
-    ? 'Agree to the usage policy first.'
-    : !isReady
-    ? 'Download the models first. See Device & Models tab.'
-    : sourcePath.trim() === ''
-      ? 'Select a source face in step 1.'
-      : targetPath.trim() === ''
-        ? 'Select a photo or video target in step 2.'
-        : null;
+  const blocker =
+    policyAcknowledged !== true
+      ? 'Agree to the usage policy first.'
+      : !isReady
+        ? 'Download the models first. See Device & Models tab.'
+        : sourcePath.trim() === ''
+          ? 'Select a source face in step 1.'
+          : targetPath.trim() === ''
+            ? 'Select a photo or video target in step 2.'
+            : null;
 
   return (
     // `edges` names both ends on purpose: the top for the status bar, the bottom for the
