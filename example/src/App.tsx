@@ -45,7 +45,7 @@ import {
   type DetectedFace,
 } from 'react-native-facefusion';
 
-// App-specific external storage (getExternalFilesDir) — avoids scoped storage restrictions.
+// App-specific external storage (getExternalFilesDir) - avoids scoped storage restrictions.
 const FILES_DIR = '/sdcard/Android/data/facefusion.example/files';
 
 // INPUTS START EMPTY, ON PURPOSE. They used to be pre-filled with
@@ -61,14 +61,14 @@ const DEFAULT_TARGET = '';
 const DEFAULT_OUTPUT = `${FILES_DIR}/swapped.jpg`;
 const DEFAULT_VIDEO_OUTPUT = `${FILES_DIR}/swapped.mp4`;
 
-// Sample media — picked up automatically IF it is actually on the device, and ignored
+// Sample media - picked up automatically IF it is actually on the device, and ignored
 // entirely if it is not.
 //
 // This is not a retreat from the rule above. The bug that rule exists for was pointing
 // the fields at a path and *hoping*: on a fresh install the file was absent, the form
 // looked ready, and the first tap answered "Could not decode image". Here nothing is
 // filled in until the file has been confirmed to exist AND to decode, so a device
-// without these files behaves exactly as it does today — empty fields pointing at the
+// without these files behaves exactly as it does today - empty fields pointing at the
 // picker.
 //
 // Put two photos under these names to have them adopted on launch:
@@ -92,7 +92,7 @@ const VIDEO_EXTENSIONS = [
 
 /**
  * Opens the system document picker via the example app's own `MediaPickerModule`
- * (`example/android/.../MediaPickerModule.kt` — not part of the library) and resolves with
+ * (`example/android/.../MediaPickerModule.kt` - not part of the library) and resolves with
  * a real filesystem path, or `null` if the user backed out. Requests the granular media
  * permission first; `ACTION_OPEN_DOCUMENT` does not actually need it (the Storage Access
  * Framework grants the one picked file regardless), but it's asked for anyway so a denial
@@ -180,7 +180,7 @@ function AppScreen() {
   const [savedUri, setSavedUri] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Source face picker — which face in sourcePath becomes the identity, when it has more
+  // Source face picker - which face in sourcePath becomes the identity, when it has more
   // than one. `null` selection means the default: the largest face, same as every swap
   // before this existed. Cleared whenever sourcePath changes, since a detected list belongs
   // to one specific photo and a stale selection would silently apply to the wrong one.
@@ -191,7 +191,7 @@ function AppScreen() {
     null
   );
 
-  // Target face picker (photo) — which face in targetPath actually gets swapped, when it
+  // Target face picker (photo) - which face in targetPath actually gets swapped, when it
   // has more than one. `null` selection means the default: every face found (subject to
   // `largestFaceOnly` above), same as before this existed. See ADR-0014.
   const [targetFaces, setTargetFaces] = useState<DetectedFace[]>([]);
@@ -211,13 +211,13 @@ function AppScreen() {
   );
   const [videoResult, setVideoResult] = useState<SwapVideoResult | null>(null);
 
-  // Video FPS cap — set before running the swap, per Saad's own framing. Off by default
+  // Video FPS cap -- set before running the swap, per Saad's own framing. Off by default
   // (every frame, unchanged behaviour); when on, only `targetFpsValue` of the source's own
   // frames actually get swapped and encoded, the rest decoded and dropped. See ADR-0014.
   const [fpsCapEnabled, setFpsCapEnabled] = useState(false);
   const [targetFpsValue, setTargetFpsValue] = useState(15);
 
-  // Advanced swap options — every one of these already exists on the native side
+  // Advanced swap options -- every one of these already exists on the native side
   // (SwapConfig.kt, ffpipe::Config) and was already accepted by swapPhoto()/swapVideo();
   // this is the first UI for any of them. Defaults match SwapConfig's own Kotlin defaults.
   // Shared between the photo and video cards below, since both take the same SwapOptions.
@@ -239,6 +239,33 @@ function AppScreen() {
   const [faceEnhance, setFaceEnhance] = useState(false);
   const [faceEnhancerBlend, setFaceEnhancerBlend] = useState(0.8);
 
+  const isOptionsModified =
+    swapperWeight !== 0.5 ||
+    maskBlur !== 0.3 ||
+    maskPadding !== 0 ||
+    detectorScore !== 0.5 ||
+    landmarkerScore !== 0.5 ||
+    pixelBoost !== 1 ||
+    largestFaceOnly !== false ||
+    faceEnhance !== false ||
+    faceEnhancerBlend !== 0.8 ||
+    fpsCapEnabled !== false ||
+    targetFpsValue !== 15;
+
+  const resetOptions = useCallback(() => {
+    setSwapperWeight(0.5);
+    setMaskBlur(0.3);
+    setMaskPadding(0);
+    setDetectorScore(0.5);
+    setLandmarkerScore(0.5);
+    setPixelBoost(1);
+    setLargestFaceOnly(false);
+    setFaceEnhance(false);
+    setFaceEnhancerBlend(0.8);
+    setFpsCapEnabled(false);
+    setTargetFpsValue(15);
+  }, []);
+
   const selectedFace =
     selectedFaceIndex != null ? sourceFaces[selectedFaceIndex] : undefined;
   const selectedTargetFace =
@@ -259,7 +286,7 @@ function AppScreen() {
   const outputPath =
     outputOverride ?? (targetIsVideo ? DEFAULT_VIDEO_OUTPUT : DEFAULT_OUTPUT);
 
-  // Shared by both photo and video — the identity (source) side is one picker either way.
+  // Shared by both photo and video -- the identity (source) side is one picker either way.
   // targetFaceBox differs per target, so it's added below rather than here.
   const commonOptions = useMemo(
     () => ({
@@ -306,7 +333,7 @@ function AppScreen() {
     ]
   );
 
-  // A detected-faces list belongs to one specific photo — stale results pointing at a
+  // A detected-faces list belongs to one specific photo -- stale results pointing at a
   // different image would silently swap the wrong face in. Bumped here and checked in
   // detectFaces()'s .then() -- a detect started against the old path can still be
   // in flight when the path changes, and its result must not land on the new one.
@@ -331,7 +358,7 @@ function AppScreen() {
     (what: string) =>
       `No ${what} found at detector confidence ${detectorScore.toFixed(2)}. ` +
       'Older chips score the same photo lower than newer ones, so try lowering ' +
-      '"Detector confidence" under Advanced to about 0.30 and detecting again.',
+      '"Detector confidence" under Options to about 0.30 and detecting again.',
     [detectorScore]
   );
 
@@ -417,7 +444,7 @@ function AppScreen() {
 
   // Adopt the sample media if it is there. `Image.getSize` is the existence check:
   // React Native core has no filesystem API and this app has no `react-native-fs`, and
-  // getSize only succeeds on a file that both exists and actually decodes — which is a
+  // getSize only succeeds on a file that both exists and actually decodes - which is a
   // stronger check than "the path is present" anyway, since an unreadable or truncated
   // file is exactly as useless to the swap as a missing one.
   //
@@ -542,31 +569,39 @@ function AppScreen() {
   // explanation is the worst state a first-time user can land in -- they cannot tell
   // a missing 317 MB download apart from an unpicked file. `null` means good to go.
   const blocker = !isReady
-    ? 'Download the models first — see Device & Models.'
+    ? 'Download the models first. See Device & Models tab.'
     : sourcePath.trim() === ''
-      ? 'Choose a source face in step 1.'
+      ? 'Select a source face in step 1.'
       : targetPath.trim() === ''
-        ? 'Choose a photo or video in step 2.'
+        ? 'Select a photo or video target in step 2.'
         : null;
 
   return (
     // `edges` names both ends on purpose: the top for the status bar, the bottom for the
     // gesture-nav bar the footer row would otherwise sit underneath.
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#09090b" />
 
       {/* Top Header Bar */}
       <View style={styles.topBar}>
-        <View>
+        <View style={styles.topBarLeft}>
           <Text style={styles.appTitle}>FaceFusion</Text>
           <Text style={styles.appSub}>Qualcomm Hexagon NPU</Text>
         </View>
-        <View
+        <TouchableOpacity
           style={[
             styles.statusBadge,
             isReady ? styles.badgeReady : styles.badgePending,
           ]}
+          onPress={() => setTab('status')}
+          activeOpacity={0.7}
         >
+          <View
+            style={[
+              styles.statusDot,
+              isReady ? styles.statusDotReady : styles.statusDotPending,
+            ]}
+          />
           <Text
             style={[
               styles.statusBadgeText,
@@ -575,7 +610,7 @@ function AppScreen() {
           >
             {isReady ? 'Ready' : 'No Models'}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Segmented Switcher */}
@@ -626,6 +661,7 @@ function AppScreen() {
               onPress={() => setTab('status')}
               activeOpacity={0.7}
             >
+              <View style={styles.noticeDot} />
               <Text style={styles.noticeText}>
                 Models not downloaded. Tap here to download.
               </Text>
@@ -636,7 +672,15 @@ function AppScreen() {
           <View style={styles.stage}>
             {swapping ? (
               // Live, straight from the native Surface -- no pixels over the bridge.
-              <FacefusionPreview style={styles.stageFill} />
+              <View style={styles.stageFill}>
+                <FacefusionPreview style={styles.stageFill} />
+                <View style={styles.stageLiveBadge}>
+                  <View style={styles.livePulseDot} />
+                  <Text style={styles.stageLiveBadgeText}>
+                    LIVE NPU PREVIEW
+                  </Text>
+                </View>
+              </View>
             ) : swapResult != null ? (
               <Image
                 style={styles.stageFill}
@@ -648,14 +692,36 @@ function AppScreen() {
             ) : videoResult != null ? (
               // A finished clip cannot be played here -- <Image> renders no video and
               // this app has no player -- so the stage reports instead of showing.
-              <View style={styles.stageEmpty}>
-                <Text style={styles.stageDoneMark}>✓</Text>
-                <Text style={styles.stageDoneText}>
-                  {videoResult.frameCount} frames · {videoResult.fps.toFixed(1)}{' '}
-                  fps
-                </Text>
-                <Text style={styles.stageHint} numberOfLines={1}>
-                  Saved to {videoResult.outputPath.split('/').pop()}
+              <View style={styles.stageResultCard}>
+                <View style={styles.stageResultBadge}>
+                  <Text style={styles.stageResultBadgeText}>
+                    VIDEO COMPLETE
+                  </Text>
+                </View>
+                <View style={styles.stageMetricsRow}>
+                  <View style={styles.stageMetricBox}>
+                    <Text style={styles.stageMetricVal}>
+                      {videoResult.frameCount}
+                    </Text>
+                    <Text style={styles.stageMetricLbl}>Frames</Text>
+                  </View>
+                  <View style={styles.stageMetricDivider} />
+                  <View style={styles.stageMetricBox}>
+                    <Text style={styles.stageMetricVal}>
+                      {videoResult.fps.toFixed(1)}
+                    </Text>
+                    <Text style={styles.stageMetricLbl}>FPS</Text>
+                  </View>
+                  <View style={styles.stageMetricDivider} />
+                  <View style={styles.stageMetricBox}>
+                    <Text style={styles.stageMetricVal}>
+                      {videoResult.tier}
+                    </Text>
+                    <Text style={styles.stageMetricLbl}>NPU Tier</Text>
+                  </View>
+                </View>
+                <Text style={styles.stagePathText} numberOfLines={1}>
+                  Output: {videoResult.outputPath.split('/').pop()}
                 </Text>
               </View>
             ) : (
@@ -664,11 +730,22 @@ function AppScreen() {
               // the tiles below already show what is selected. The stage stays empty
               // until something has actually been produced.
               <View style={styles.stageEmpty}>
-                <Text style={styles.stageMark}>◎</Text>
+                <View style={styles.viewfinder}>
+                  <View style={[styles.cornerBracket, styles.cornerTL]} />
+                  <View style={[styles.cornerBracket, styles.cornerTR]} />
+                  <View style={[styles.cornerBracket, styles.cornerBL]} />
+                  <View style={[styles.cornerBracket, styles.cornerBR]} />
+                  <View style={styles.viewfinderCenter}>
+                    <View style={styles.viewfinderIconCircle} />
+                  </View>
+                </View>
+                <Text style={styles.stageTitle}>
+                  {blocker == null ? 'Ready to Swap' : 'Preview & Results'}
+                </Text>
                 <Text style={styles.stageHint}>
                   {blocker == null
-                    ? 'Ready — tap Run Swap'
-                    : 'The swapped result appears here'}
+                    ? 'Tap Run Swap below to generate result'
+                    : 'The swapped result will appear here'}
                 </Text>
               </View>
             )}
@@ -688,15 +765,19 @@ function AppScreen() {
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.stageSave}
+                  style={[
+                    styles.stageSave,
+                    savedUri != null && styles.stageSaveDone,
+                  ]}
                   onPress={saveResultToGallery}
                   disabled={saving}
+                  activeOpacity={0.8}
                 >
                   {saving ? (
                     <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
                     <Text style={styles.stageSaveText}>
-                      {savedUri != null ? 'Saved ✓' : 'Save to Gallery'}
+                      {savedUri != null ? 'Saved to Photos' : 'Save to Gallery'}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -716,16 +797,17 @@ function AppScreen() {
                     />
                   </View>
                   <Text style={styles.progressText}>
-                    frame {videoProgress.frameIndex}
+                    Frame {videoProgress.frameIndex}
                     {videoProgress.estimatedFrameCount > 0
                       ? ` / ~${videoProgress.estimatedFrameCount}`
                       : ''}{' '}
-                    · {videoProgress.fps.toFixed(1)} fps
+                    · {videoProgress.fps.toFixed(1)} FPS ({videoPercent}%)
                   </Text>
                 </View>
                 <TouchableOpacity
                   style={styles.stageCancel}
                   onPress={cancelVideoSwap}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.cancelButtonText}>Stop</Text>
                 </TouchableOpacity>
@@ -734,27 +816,35 @@ function AppScreen() {
           </View>
 
           {(swapError != null || saveError != null) && (
-            <Text style={styles.errorText} numberOfLines={2}>
-              {swapError ?? saveError}
-            </Text>
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText} numberOfLines={2}>
+                {swapError ?? saveError}
+              </Text>
+            </View>
           )}
 
           {/* ===== Controls ===== */}
           <View style={styles.pairRow}>
             <MediaTile
               step="1"
-              label="Source face"
+              label="Source Face"
               path={sourcePath}
               kind="image"
               onPress={pickSource}
+              onClear={() => setSourcePath('')}
+              faceCount={sourceFaces.length}
             />
-            <Text style={styles.pairArrow}>→</Text>
+            <View style={styles.pairArrowContainer}>
+              <Text style={styles.pairArrow}>-&gt;</Text>
+            </View>
             <MediaTile
               step="2"
-              label={targetIsVideo ? 'Target clip' : 'Target'}
+              label={targetIsVideo ? 'Target Clip' : 'Target Media'}
               path={targetPath}
               kind={targetIsVideo ? 'video' : 'image'}
               onPress={pickTarget}
+              onClear={() => setTargetPath('')}
+              faceCount={targetFaces.length}
             />
           </View>
 
@@ -766,7 +856,8 @@ function AppScreen() {
               faces={sourceFaces}
               selected={selectedFaceIndex}
               onSelect={setSelectedFaceIndex}
-              defaultLabel="Largest"
+              defaultLabel="Auto (Largest)"
+              title="Select Identity Face"
             />
           )}
           {targetFaces.length > 0 && (
@@ -776,7 +867,8 @@ function AppScreen() {
               faces={targetFaces}
               selected={selectedTargetFaceIndex}
               onSelect={setSelectedTargetFaceIndex}
-              defaultLabel="All faces"
+              defaultLabel="All Faces"
+              title="Select Target Face"
             />
           )}
 
@@ -790,68 +882,142 @@ function AppScreen() {
             activeOpacity={0.8}
           >
             {swapping ? (
-              <ActivityIndicator size="small" color="#000000" />
+              <View style={styles.buttonRunningRow}>
+                <ActivityIndicator size="small" color="#000000" />
+                <Text style={styles.buttonRunningText}>
+                  {targetIsVideo ? 'Swapping Video...' : 'Swapping Photo...'}
+                </Text>
+              </View>
             ) : (
-              <Text
-                style={[
-                  styles.primaryButtonText,
-                  blocker != null && styles.buttonDisabledText,
-                ]}
-              >
-                <Text style={styles.stepNumber}>3</Text>{' '}
-                {targetIsVideo ? 'Run Video Swap' : 'Run Swap'}
-              </Text>
+              <View style={styles.buttonContentRow}>
+                <View
+                  style={[
+                    styles.stepButtonBadge,
+                    blocker != null && styles.stepButtonBadgeDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.stepButtonBadgeText,
+                      blocker != null && styles.stepButtonBadgeTextDisabled,
+                    ]}
+                  >
+                    3
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.primaryButtonText,
+                    blocker != null && styles.buttonDisabledText,
+                  ]}
+                >
+                  {targetIsVideo ? 'Run Video Swap' : 'Run Swap'}
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
 
           {blocker != null && !swapping && (
-            <Text style={styles.blockerText}>{blocker}</Text>
+            <View style={styles.blockerCard}>
+              <View style={styles.blockerDot} />
+              <Text style={styles.blockerText}>{blocker}</Text>
+            </View>
           )}
 
-          {/* Everything that is not the main flow, on one line. */}
+          {/* Everything that is not the main flow, in a refined quick toolbar. */}
           <View style={styles.footerRow}>
             <TouchableOpacity
+              style={[
+                styles.footerButton,
+                (!isReady || sourcePath.trim() === '') &&
+                  styles.footerButtonDisabled,
+              ]}
               onPress={detectFaces}
               disabled={detectingFaces || !isReady || sourcePath.trim() === ''}
+              activeOpacity={0.7}
             >
+              {detectingFaces && (
+                <ActivityIndicator
+                  size="small"
+                  color="#38bdf8"
+                  style={styles.footerButtonSpinner}
+                />
+              )}
               <Text
                 style={[
-                  styles.footerLink,
+                  styles.footerButtonText,
                   (!isReady || sourcePath.trim() === '') &&
-                    styles.footerLinkDisabled,
+                    styles.footerButtonTextDisabled,
                 ]}
               >
-                {detectingFaces ? 'Detecting…' : 'Source faces'}
+                {detectingFaces ? 'Scanning...' : 'Detect Source'}
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
+              style={[
+                styles.footerButton,
+                (!isReady || targetPath.trim() === '') &&
+                  styles.footerButtonDisabled,
+              ]}
               onPress={detectTargetFacesForPhoto}
               disabled={
                 detectingTargetFaces || !isReady || targetPath.trim() === ''
               }
+              activeOpacity={0.7}
             >
+              {detectingTargetFaces && (
+                <ActivityIndicator
+                  size="small"
+                  color="#38bdf8"
+                  style={styles.footerButtonSpinner}
+                />
+              )}
               <Text
                 style={[
-                  styles.footerLink,
+                  styles.footerButtonText,
                   (!isReady || targetPath.trim() === '') &&
-                    styles.footerLinkDisabled,
+                    styles.footerButtonTextDisabled,
                 ]}
               >
-                {detectingTargetFaces ? 'Detecting…' : 'Target faces'}
+                {detectingTargetFaces ? 'Scanning...' : 'Detect Target'}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setOptionsExpanded(true)}>
-              <Text style={styles.footerLink}>Options</Text>
+
+            <TouchableOpacity
+              style={[
+                styles.footerButton,
+                isOptionsModified && styles.footerButtonActive,
+              ]}
+              onPress={() => setOptionsExpanded(true)}
+              activeOpacity={0.7}
+            >
+              {isOptionsModified && <View style={styles.activeDot} />}
+              <Text
+                style={[
+                  styles.footerButtonText,
+                  isOptionsModified && styles.footerButtonTextActive,
+                ]}
+              >
+                Options
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setPathsExpanded(true)}>
-              <Text style={styles.footerLink}>Paths</Text>
+
+            <TouchableOpacity
+              style={styles.footerButton}
+              onPress={() => setPathsExpanded(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.footerButtonText}>Paths</Text>
             </TouchableOpacity>
           </View>
 
           {(detectError != null || detectTargetError != null) && (
-            <Text style={styles.errorText} numberOfLines={3}>
-              {detectError ?? detectTargetError}
-            </Text>
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText} numberOfLines={3}>
+                {detectError ?? detectTargetError}
+              </Text>
+            </View>
           )}
 
           {/* ===== Advanced options, in a sheet rather than on the screen =====
@@ -861,9 +1027,21 @@ function AppScreen() {
             visible={optionsExpanded}
             title="Options"
             onClose={() => setOptionsExpanded(false)}
+            headerRight={
+              isOptionsModified ? (
+                <TouchableOpacity
+                  onPress={resetOptions}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.resetTouch}
+                >
+                  <Text style={styles.resetText}>Reset</Text>
+                </TouchableOpacity>
+              ) : null
+            }
           >
             {targetIsVideo && (
               <>
+                <Text style={styles.sheetSectionHeader}>Video Processing</Text>
                 <ToggleRow
                   label="Limit video FPS (faster swap, choppier output)"
                   value={fpsCapEnabled}
@@ -882,14 +1060,52 @@ function AppScreen() {
                 <Separator />
               </>
             )}
+
+            <Text style={styles.sheetSectionHeader}>Identity & Quality</Text>
             <NumberStepper
-              label="Blend (source ↔ target identity)"
+              label="Blend (source to target identity)"
               value={swapperWeight}
               onChange={setSwapperWeight}
               min={0}
               max={1}
               step={0.05}
             />
+            <NumberStepper
+              label="Pixel boost"
+              value={pixelBoost}
+              onChange={(v) => setPixelBoost(Math.round(v))}
+              min={1}
+              max={4}
+              step={1}
+              format={(v) => `${v}x (${256 * v}px)`}
+            />
+            <Separator />
+
+            <Text style={styles.sheetSectionHeader}>Face Detection</Text>
+            <NumberStepper
+              label="Detector confidence"
+              value={detectorScore}
+              onChange={setDetectorScore}
+              min={0}
+              max={1}
+              step={0.05}
+            />
+            <NumberStepper
+              label="Landmarker confidence"
+              value={landmarkerScore}
+              onChange={setLandmarkerScore}
+              min={0}
+              max={1}
+              step={0.05}
+            />
+            <ToggleRow
+              label="Swap largest face only (target)"
+              value={largestFaceOnly}
+              onChange={setLargestFaceOnly}
+            />
+            <Separator />
+
+            <Text style={styles.sheetSectionHeader}>Masking</Text>
             <NumberStepper
               label="Mask blur"
               value={maskBlur}
@@ -907,36 +1123,9 @@ function AppScreen() {
               step={5}
               format={(v) => `${v}%`}
             />
-            <NumberStepper
-              label="Detector confidence"
-              value={detectorScore}
-              onChange={setDetectorScore}
-              min={0}
-              max={1}
-              step={0.05}
-            />
-            <NumberStepper
-              label="Landmarker confidence"
-              value={landmarkerScore}
-              onChange={setLandmarkerScore}
-              min={0}
-              max={1}
-              step={0.05}
-            />
-            <NumberStepper
-              label="Pixel boost"
-              value={pixelBoost}
-              onChange={(v) => setPixelBoost(Math.round(v))}
-              min={1}
-              max={4}
-              step={1}
-              format={(v) => `${v}× (${256 * v}px)`}
-            />
-            <ToggleRow
-              label="Swap largest face only (target)"
-              value={largestFaceOnly}
-              onChange={setLargestFaceOnly}
-            />
+            <Separator />
+
+            <Text style={styles.sheetSectionHeader}>Enhancement</Text>
             <ToggleRow
               label={
                 models?.hasEnhancer
@@ -963,41 +1152,84 @@ function AppScreen() {
               how this gets tested; it just is not the screen any more. ===== */}
           <Sheet
             visible={pathsExpanded}
-            title="File paths"
+            title="File Paths"
             onClose={() => setPathsExpanded(false)}
           >
-            <Text style={styles.inputLabel}>Source</Text>
-            <TextInput
-              style={styles.input}
-              value={sourcePath}
-              onChangeText={setSourcePath}
-              placeholder="the face to copy from"
-              placeholderTextColor="#636366"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.inputLabel}>Target (photo or video)</Text>
-            <TextInput
-              style={styles.input}
-              value={targetPath}
-              onChangeText={setTargetPath}
-              placeholder="the photo or clip to change"
-              placeholderTextColor="#636366"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.inputLabel}>
-              Output {outputOverride == null ? '(following the target)' : ''}
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={outputPath}
-              onChangeText={setOutputOverride}
-              placeholder="where to write the result"
-              placeholderTextColor="#636366"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            <View style={styles.pathItem}>
+              <View style={styles.pathHeaderRow}>
+                <Text style={styles.inputLabel}>Source Image</Text>
+                {sourcePath.trim() !== '' && (
+                  <TouchableOpacity
+                    onPress={() => setSourcePath('')}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={styles.pathClearLink}>Clear</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TextInput
+                style={styles.input}
+                value={sourcePath}
+                onChangeText={setSourcePath}
+                placeholder="The face image to copy from"
+                placeholderTextColor="#71717a"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.pathItem}>
+              <View style={styles.pathHeaderRow}>
+                <Text style={styles.inputLabel}>
+                  Target Media (Photo or Video)
+                </Text>
+                {targetPath.trim() !== '' && (
+                  <TouchableOpacity
+                    onPress={() => setTargetPath('')}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={styles.pathClearLink}>Clear</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TextInput
+                style={styles.input}
+                value={targetPath}
+                onChangeText={setTargetPath}
+                placeholder="The photo or clip to change"
+                placeholderTextColor="#71717a"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.pathItem}>
+              <View style={styles.pathHeaderRow}>
+                <Text style={styles.inputLabel}>
+                  Output{' '}
+                  {outputOverride == null
+                    ? '(Following target kind)'
+                    : '(Custom)'}
+                </Text>
+                {outputOverride != null && (
+                  <TouchableOpacity
+                    onPress={() => setOutputOverride(null)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={styles.pathClearLink}>Reset to Default</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TextInput
+                style={styles.input}
+                value={outputPath}
+                onChangeText={setOutputOverride}
+                placeholder="Where to write the result"
+                placeholderTextColor="#71717a"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
           </Sheet>
         </View>
       ) : (
@@ -1013,32 +1245,32 @@ function AppScreen() {
             <View style={styles.card}>
               <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitle}>Device</Text>
-                {probing && <ActivityIndicator size="small" color="#8e8e93" />}
+                {probing && <ActivityIndicator size="small" color="#a1a1aa" />}
               </View>
 
               {probe == null ? (
-                <Text style={styles.mutedText}>Probing device…</Text>
+                <Text style={styles.mutedText}>Probing device...</Text>
               ) : (
                 <>
                   <Row label="Tier" value={probe.tier} />
                   <Separator />
-                  <Row label="Chain" value={probe.tierChain.join(' → ')} />
+                  <Row label="Chain" value={probe.tierChain.join(' -> ')} />
                   <Separator />
                   <Row label="Verified NPU" value={probe.ok ? 'Yes' : 'No'} />
                   <Separator />
                   <Row
                     label="Architecture"
-                    value={probe.ok ? `v${probe.arch}` : '—'}
+                    value={probe.ok ? `v${probe.arch}` : 'N/A'}
                   />
                   <Separator />
                   <Row
                     label="VTCM Memory"
-                    value={probe.ok ? `${probe.vtcmMb} MB` : '—'}
+                    value={probe.ok ? `${probe.vtcmMb} MB` : 'N/A'}
                   />
                   <Separator />
                   <Row
                     label="SoC ID"
-                    value={probe.ok ? String(probe.socModel) : '—'}
+                    value={probe.ok ? String(probe.socModel) : 'N/A'}
                   />
                   {probe.error ? (
                     <>
@@ -1057,7 +1289,7 @@ function AppScreen() {
               </View>
 
               {models == null ? (
-                <Text style={styles.mutedText}>Checking models…</Text>
+                <Text style={styles.mutedText}>Checking models...</Text>
               ) : (
                 <>
                   <Row
@@ -1110,6 +1342,7 @@ function AppScreen() {
                 <TouchableOpacity
                   style={styles.secondaryButton}
                   onPress={download}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.secondaryButtonText}>
                     {models.metered
@@ -1123,6 +1356,7 @@ function AppScreen() {
                 <TouchableOpacity
                   style={[styles.secondaryButton, styles.cancelButton]}
                   onPress={cancelModelDownload}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.cancelButtonText}>Cancel Download</Text>
                 </TouchableOpacity>
@@ -1188,7 +1422,7 @@ function FaceThumb({
 /**
  * The face picker: the default option plus one tile per detected face.
  *
- * `path` is the photo the faces were found in — when it is null (a video, whose first
+ * `path` is the photo the faces were found in -- when it is null (a video, whose first
  * frame this app has no way to render) the tiles fall back to numbered placeholders,
  * which is what every picker in this app used to be.
  */
@@ -1198,64 +1432,74 @@ function FaceStrip({
   selected,
   onSelect,
   defaultLabel,
+  title,
 }: {
   path: string | null;
   faces: DetectedFace[];
   selected: number | null;
   onSelect: (index: number | null) => void;
   defaultLabel: string;
+  title: string;
 }) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.faceStrip}
-    >
-      <TouchableOpacity
-        style={[
-          styles.faceOption,
-          selected === null && styles.faceOptionSelected,
-        ]}
-        onPress={() => onSelect(null)}
-        activeOpacity={0.8}
-      >
-        <View style={[styles.faceThumb, styles.faceThumbAuto]}>
-          <Text style={styles.faceThumbAutoMark}>A</Text>
-        </View>
-        <Text style={styles.faceOptionLabel} numberOfLines={1}>
-          {defaultLabel}
+    <View style={styles.faceStripContainer}>
+      <View style={styles.faceStripHeader}>
+        <Text style={styles.faceStripTitle}>{title}</Text>
+        <Text style={styles.faceStripCount}>
+          {faces.length} {faces.length === 1 ? 'face' : 'faces'}
         </Text>
-      </TouchableOpacity>
-
-      {faces.map((face, i) => (
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.faceStrip}
+      >
         <TouchableOpacity
-          key={i}
           style={[
             styles.faceOption,
-            selected === i && styles.faceOptionSelected,
+            selected === null && styles.faceOptionSelected,
           ]}
-          onPress={() => onSelect(i)}
+          onPress={() => onSelect(null)}
           activeOpacity={0.8}
         >
-          {path != null ? (
-            <FaceThumb path={path} face={face} size={62} />
-          ) : (
-            <View style={[styles.faceThumb, styles.faceThumbAuto]}>
-              <Text style={styles.faceThumbAutoMark}>{i + 1}</Text>
-            </View>
-          )}
+          <View style={[styles.faceThumb, styles.faceThumbAuto]}>
+            <Text style={styles.faceThumbAutoMark}>AUTO</Text>
+          </View>
           <Text style={styles.faceOptionLabel} numberOfLines={1}>
-            {(face.score * 100).toFixed(0)}%
+            {defaultLabel}
           </Text>
         </TouchableOpacity>
-      ))}
-    </ScrollView>
+
+        {faces.map((face, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[
+              styles.faceOption,
+              selected === i && styles.faceOptionSelected,
+            ]}
+            onPress={() => onSelect(i)}
+            activeOpacity={0.8}
+          >
+            {path != null ? (
+              <FaceThumb path={path} face={face} size={58} />
+            ) : (
+              <View style={[styles.faceThumb, styles.faceThumbAuto]}>
+                <Text style={styles.faceThumbAutoMark}>#{i + 1}</Text>
+              </View>
+            )}
+            <Text style={styles.faceOptionLabel} numberOfLines={1}>
+              {(face.score * 100).toFixed(0)}%
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
 /**
  * The source/target picker tile: the picked image itself, or an empty state that says
- * what to do. Replaces a label + "Choose photo…" link + a raw path in a TextInput, which
+ * what to do. Replaces a label + "Choose photo..." link + a raw path in a TextInput, which
  * gave no confirmation of *what* had been picked -- the single most confusing thing about
  * the old screen, since a wrong pick looked identical to a right one.
  */
@@ -1265,49 +1509,96 @@ function MediaTile({
   path,
   kind,
   onPress,
+  onClear,
+  faceCount,
 }: {
   step: string;
   label: string;
   path: string;
   kind: 'image' | 'video';
   onPress: () => void;
+  onClear?: () => void;
+  faceCount?: number;
 }) {
   const filled = path.trim() !== '';
+  const fileName = filled ? path.split('/').pop() : '';
+
   return (
-    <TouchableOpacity style={styles.tile} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.tileFrame}>
+    <View style={styles.tile}>
+      <TouchableOpacity
+        style={[styles.tileFrame, filled && styles.tileFrameFilled]}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
         {filled && kind === 'image' ? (
           <Image
             source={{ uri: `file://${path}` }}
             style={styles.tileImage}
             resizeMode="cover"
           />
+        ) : filled && kind === 'video' ? (
+          <View style={styles.tileVideoPreview}>
+            <View style={styles.videoPill}>
+              <Text style={styles.videoPillText}>VIDEO</Text>
+            </View>
+            <Text style={styles.tileFileName} numberOfLines={2}>
+              {fileName}
+            </Text>
+            <Text style={styles.tileTapHint}>Tap to change</Text>
+          </View>
         ) : (
           <View style={styles.tileEmpty}>
-            <Text style={styles.tileEmptyMark}>{filled ? '▶' : '+'}</Text>
-            {filled && (
-              <Text style={styles.tileEmptyText} numberOfLines={1}>
-                {path.split('/').pop()}
-              </Text>
-            )}
+            <View style={styles.tilePlusCircle}>
+              <Text style={styles.tilePlusText}>+</Text>
+            </View>
+            <Text style={styles.tileEmptyAction}>
+              {kind === 'video' ? 'Select Media' : 'Select Photo'}
+            </Text>
+            <Text style={styles.tileEmptySub}>Tap to browse</Text>
           </View>
         )}
+
+        {filled && faceCount != null && faceCount > 0 && (
+          <View style={styles.faceCountBadge}>
+            <Text style={styles.faceCountBadgeText}>
+              {faceCount} {faceCount === 1 ? 'face' : 'faces'}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.tileCaptionRow}>
+        <View style={styles.tileCaptionLeft}>
+          <View style={styles.tileStepBadge}>
+            <Text style={styles.tileStepText}>{step}</Text>
+          </View>
+          <Text style={styles.tileLabel} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+        {filled && onClear && (
+          <TouchableOpacity
+            onPress={onClear}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.tileClearText}>Clear</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      <View style={styles.tileCaption}>
-        <Text style={styles.tileStep}>{step}</Text>
-        <Text style={styles.tileLabel} numberOfLines={1}>
-          {label}
-        </Text>
-      </View>
-      <Text style={styles.tileAction}>
-        {filled ? 'Change' : kind === 'video' ? 'Choose video' : 'Choose photo'}
-      </Text>
-    </TouchableOpacity>
+      {filled && (
+        <TouchableOpacity
+          onPress={onPress}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        >
+          <Text style={styles.tileAction}>Change</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
 /**
- * A bottom sheet for the things that are not the main flow — advanced options, raw
+ * A bottom sheet for the things that are not the main flow -- advanced options, raw
  * paths. They used to be collapsible cards in the page, which is why the page had to
  * scroll at all: eleven steppers and three text fields were taller than the actual job.
  *
@@ -1319,11 +1610,13 @@ function Sheet({
   visible,
   title,
   onClose,
+  headerRight,
   children,
 }: {
   visible: boolean;
   title: string;
   onClose: () => void;
+  headerRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -1340,11 +1633,19 @@ function Sheet({
           activeOpacity={1}
         />
         <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{title}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={12}>
-              <Text style={styles.sheetDone}>Done</Text>
-            </TouchableOpacity>
+            <View style={styles.sheetHeaderRight}>
+              {headerRight}
+              <TouchableOpacity
+                onPress={onClose}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.sheetDoneButton}
+              >
+                <Text style={styles.sheetDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <ScrollView
             style={styles.sheetBody}
@@ -1383,7 +1684,7 @@ function Separator() {
 }
 
 /** No slider in bare RN core (`@react-native-community/slider` is a separate install this
- *  project doesn't otherwise need) — a stepper is one fewer dependency for the same knob. */
+ *  project doesn't otherwise need) - a stepper is one fewer dependency for the same knob. */
 function NumberStepper({
   label,
   value,
@@ -1402,24 +1703,51 @@ function NumberStepper({
   format?: (value: number) => string;
 }) {
   const clamp = (v: number) => Math.min(max, Math.max(min, +v.toFixed(2)));
+  const canDec = value > min;
+  const canInc = value < max;
+
   return (
     <View style={styles.stepperRow}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.stepperControls}>
         <TouchableOpacity
-          style={styles.stepperButton}
+          style={[
+            styles.stepperButton,
+            !canDec && styles.stepperButtonDisabled,
+          ]}
           onPress={() => onChange(clamp(value - step))}
+          disabled={!canDec}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Text style={styles.stepperButtonText}>−</Text>
+          <Text
+            style={[
+              styles.stepperButtonText,
+              !canDec && styles.stepperButtonTextDisabled,
+            ]}
+          >
+            -
+          </Text>
         </TouchableOpacity>
         <Text style={styles.stepperValue}>
           {format ? format(value) : value.toFixed(2)}
         </Text>
         <TouchableOpacity
-          style={styles.stepperButton}
+          style={[
+            styles.stepperButton,
+            !canInc && styles.stepperButtonDisabled,
+          ]}
           onPress={() => onChange(clamp(value + step))}
+          disabled={!canInc}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Text style={styles.stepperButtonText}>+</Text>
+          <Text
+            style={[
+              styles.stepperButtonText,
+              !canInc && styles.stepperButtonTextDisabled,
+            ]}
+          >
+            +
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -1440,7 +1768,13 @@ function ToggleRow({
   return (
     <View style={styles.row}>
       <Text style={[styles.label, disabled && styles.mutedText]}>{label}</Text>
-      <Switch value={value} onValueChange={onChange} disabled={disabled} />
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        trackColor={{ false: '#27272a', true: '#0a84ff' }}
+        thumbColor={value ? '#ffffff' : '#a1a1aa'}
+      />
     </View>
   );
 }
@@ -1448,7 +1782,7 @@ function ToggleRow({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#09090b',
     // No manual StatusBar.currentHeight padding any more -- SafeAreaView supplies the
     // real inset on both edges, and doing both double-padded the top.
   },
@@ -1457,61 +1791,89 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  topBarLeft: {
+    gap: 1,
   },
   appTitle: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: '700',
     color: '#ffffff',
     letterSpacing: -0.4,
   },
   appSub: {
     fontSize: 12,
-    color: '#8e8e93',
+    color: '#71717a',
+    fontWeight: '500',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   badgeReady: {
-    backgroundColor: 'rgba(52, 199, 89, 0.15)',
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderColor: 'rgba(34, 197, 94, 0.25)',
   },
   badgePending: {
-    backgroundColor: 'rgba(255, 159, 10, 0.15)',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotReady: {
+    backgroundColor: '#22c55e',
+  },
+  statusDotPending: {
+    backgroundColor: '#f59e0b',
   },
   statusBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   textReady: {
-    color: '#34c759',
+    color: '#22c55e',
   },
   textPending: {
-    color: '#ff9f0a',
+    color: '#f59e0b',
   },
   segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: '#1c1c1e',
-    borderRadius: 8,
+    backgroundColor: '#18181b',
+    borderRadius: 10,
     marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 2,
+    marginBottom: 10,
+    padding: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27272a',
   },
   segment: {
     flex: 1,
     paddingVertical: 7,
     alignItems: 'center',
-    borderRadius: 6,
+    borderRadius: 8,
   },
   segmentActive: {
-    backgroundColor: '#2c2c2e',
+    backgroundColor: '#27272a',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   segmentText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#8e8e93',
+    color: '#71717a',
   },
   segmentTextActive: {
     color: '#ffffff',
@@ -1528,21 +1890,35 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   noticeBar: {
-    backgroundColor: '#2c2c2e',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderColor: 'rgba(245, 158, 11, 0.28)',
+    borderWidth: 1,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 9,
+  },
+  noticeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#f59e0b',
   },
   noticeText: {
     fontSize: 12,
-    color: '#ff9f0a',
+    color: '#f59e0b',
     textAlign: 'center',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   card: {
-    backgroundColor: '#1c1c1e',
-    borderRadius: 12,
+    backgroundColor: '#18181b',
+    borderRadius: 14,
     padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27272a',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -1551,91 +1927,135 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8e8e93',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  // The step number badge in "1 Source face" / "2 Target photo" / "3 Run Swap" --
-  // the flow used to be implicit and a first-time user had to infer the order.
-  stepNumber: {
-    color: '#0a84ff',
+    fontSize: 12,
     fontWeight: '700',
+    color: '#a1a1aa',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  // Why the primary button is disabled, said out loud. Amber, not red: nothing has
-  // gone wrong yet, the user just has a step left.
-  blockerText: {
-    marginTop: 8,
-    fontSize: 12,
-    color: '#ff9f0a',
-    textAlign: 'center',
-  },
-  hint: {
-    fontSize: 11,
-    color: '#8e8e93',
-    marginBottom: 10,
-    lineHeight: 15,
-  },
-  inputLabel: {
-    fontSize: 12,
-    color: '#8e8e93',
-    marginBottom: 4,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  pickLink: {
-    fontSize: 12,
-    color: '#0a84ff',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  pickLinkDisabled: {
-    color: '#48484a',
-  },
-  input: {
-    backgroundColor: '#2c2c2e',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: '#ffffff',
-    marginBottom: 8,
-    fontVariant: ['tabular-nums'],
-  },
-  primaryButton: {
-    backgroundColor: '#ffffff',
+  stepButtonBadge: {
+    width: 20,
+    height: 20,
     borderRadius: 10,
-    paddingVertical: 13,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 14,
   },
-  secondaryButton: {
-    backgroundColor: '#2c2c2e',
-    borderRadius: 8,
-    paddingVertical: 10,
+  stepButtonBadgeDisabled: {
+    backgroundColor: '#3f3f46',
+  },
+  stepButtonBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+    lineHeight: 14,
+  },
+  stepButtonBadgeTextDisabled: {
+    color: '#71717a',
+  },
+  buttonContentRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
+    gap: 8,
   },
-  // A dimmed WHITE button is a big pale slab that reads as broken rather than as
-  // not-yet-available. Disabled is its own colour instead: clearly inert, clearly not an
-  // error, and the blocker line underneath says what is missing.
-  buttonDisabled: {
-    backgroundColor: '#2c2c2e',
-    opacity: 1,
+  buttonRunningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  buttonDisabledText: {
-    color: '#636366',
-  },
-  primaryButtonText: {
+  buttonRunningText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#000000',
+  },
+  blockerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(245, 158, 11, 0.2)',
+  },
+  blockerDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#f59e0b',
+  },
+  blockerText: {
+    fontSize: 12,
+    color: '#f59e0b',
+    fontWeight: '500',
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#a1a1aa',
+  },
+  input: {
+    backgroundColor: '#18181b',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: '#ffffff',
+    fontVariant: ['tabular-nums'],
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27272a',
+  },
+  pathItem: {
+    marginBottom: 14,
+  },
+  pathHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  pathClearLink: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0a84ff',
+  },
+  primaryButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  secondaryButton: {
+    backgroundColor: '#27272a',
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  buttonDisabled: {
+    backgroundColor: '#1c1c1f',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27272a',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  buttonDisabledText: {
+    color: '#71717a',
+  },
+  primaryButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#000000',
+    letterSpacing: -0.2,
   },
   secondaryButtonText: {
     fontSize: 13,
@@ -1643,22 +2063,25 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   cancelButton: {
-    backgroundColor: '#3a1c1c',
+    backgroundColor: '#2e1212',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
   },
   cancelButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#ff453a',
+    color: '#ef4444',
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 5,
+    paddingVertical: 6,
   },
   label: {
     fontSize: 13,
-    color: '#8e8e93',
+    color: '#a1a1aa',
+    fontWeight: '400',
   },
   value: {
     fontSize: 13,
@@ -1670,66 +2093,30 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   valueHighlight: {
-    color: '#34c759',
+    color: '#22c55e',
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#2c2c2e',
-    marginVertical: 3,
+    backgroundColor: '#27272a',
+    marginVertical: 4,
   },
   mutedText: {
     fontSize: 13,
-    color: '#636366',
+    color: '#71717a',
     paddingVertical: 4,
   },
-  errorBox: {
-    backgroundColor: 'rgba(255, 69, 58, 0.12)',
-    padding: 10,
+  errorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
   },
   errorText: {
     fontSize: 12,
-    color: '#ff453a',
-  },
-  resultMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  resultMetaText: {
-    fontSize: 13,
-    color: '#8e8e93',
-  },
-  resultBold: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  resultPathText: {
-    fontSize: 11,
-    color: '#636366',
-    marginBottom: 8,
-    fontVariant: ['tabular-nums'],
-  },
-  previewContainer: {
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewImage: {
-    width: '100%',
-    height: 200,
-  },
-  // The result deserves more room than a 200px strip -- it is the thing the whole
-  // screen exists to produce, and it was previously the same size as a progress preview.
-  resultFrame: {
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  resultImage: {
-    width: '100%',
-    height: 300,
+    color: '#ef4444',
+    fontWeight: '500',
   },
   resultChips: {
     flexDirection: 'row',
@@ -1738,80 +2125,98 @@ const styles = StyleSheet.create({
   resultChip: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#8e8e93',
-    backgroundColor: '#2c2c2e',
+    color: '#a1a1aa',
+    backgroundColor: '#27272a',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 6,
     overflow: 'hidden',
     fontVariant: ['tabular-nums'],
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3f3f46',
   },
   progressBox: {
-    marginTop: 10,
+    marginTop: 12,
   },
   progressBarTrack: {
-    height: 4,
-    backgroundColor: '#2c2c2e',
-    borderRadius: 2,
+    height: 5,
+    backgroundColor: '#27272a',
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0a84ff',
+    borderRadius: 3,
   },
   progressText: {
     fontSize: 11,
-    color: '#8e8e93',
-    marginTop: 5,
+    color: '#a1a1aa',
+    marginTop: 6,
     fontVariant: ['tabular-nums'],
-  },
-  optionsBody: {
-    marginTop: 10,
-    gap: 4,
+    fontWeight: '500',
   },
   stepperRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
   stepperControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   stepperButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    backgroundColor: '#2c2c2e',
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#27272a',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3f3f46',
+  },
+  stepperButtonDisabled: {
+    opacity: 0.35,
   },
   stepperButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     color: '#ffffff',
+    lineHeight: 18,
+  },
+  stepperButtonTextDisabled: {
+    color: '#71717a',
   },
   stepperValue: {
     fontSize: 13,
     color: '#ffffff',
-    fontWeight: '500',
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
-    minWidth: 56,
+    minWidth: 60,
     textAlign: 'center',
   },
-  // ===== Source → target pair =====
+  // ===== Source -> target pair =====
   pairRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+  },
+  pairArrowContainer: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#18181b',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27272a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pairArrow: {
-    fontSize: 17,
-    color: '#636366',
-    fontWeight: '600',
+    fontSize: 11,
+    color: '#71717a',
+    fontWeight: '700',
   },
   tile: {
     flex: 1,
@@ -1819,50 +2224,123 @@ const styles = StyleSheet.create({
   tileFrame: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 10,
+    borderRadius: 13,
     overflow: 'hidden',
-    backgroundColor: '#2c2c2e',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#3a3a3c',
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  tileFrameFilled: {
+    borderColor: '#3f3f46',
   },
   tileImage: {
     width: '100%',
     height: '100%',
   },
+  tileVideoPreview: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    gap: 6,
+    backgroundColor: '#121214',
+  },
+  videoPill: {
+    backgroundColor: '#0a84ff',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  videoPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  tileFileName: {
+    fontSize: 11,
+    color: '#ffffff',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  tileTapHint: {
+    fontSize: 10,
+    color: '#71717a',
+    fontWeight: '400',
+  },
   tileEmpty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 8,
   },
-  tileEmptyMark: {
-    fontSize: 22,
-    color: '#636366',
-    fontWeight: '300',
+  tilePlusCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#27272a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tileEmptyText: {
-    fontSize: 10,
-    color: '#8e8e93',
+  tilePlusText: {
+    fontSize: 18,
+    color: '#ffffff',
+    fontWeight: '400',
+    lineHeight: 19,
+  },
+  tileEmptyAction: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
     textAlign: 'center',
   },
-  tileCaption: {
+  tileEmptySub: {
+    fontSize: 10,
+    color: '#71717a',
+    textAlign: 'center',
+  },
+  faceCountBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3f3f46',
+  },
+  faceCountBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#38bdf8',
+  },
+  tileCaptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginTop: 7,
+    justifyContent: 'space-between',
+    marginTop: 6,
   },
-  tileStep: {
+  tileCaptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  tileStepBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(10, 132, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileStepText: {
     fontSize: 10,
     fontWeight: '700',
     color: '#0a84ff',
-    backgroundColor: 'rgba(10, 132, 255, 0.15)',
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    textAlign: 'center',
-    lineHeight: 15,
-    overflow: 'hidden',
+    lineHeight: 12,
   },
   tileLabel: {
     fontSize: 12,
@@ -1870,51 +2348,50 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     flexShrink: 1,
   },
+  tileClearText: {
+    fontSize: 11,
+    color: '#71717a',
+    fontWeight: '500',
+  },
   tileAction: {
     fontSize: 11,
     color: '#0a84ff',
     fontWeight: '500',
     marginTop: 1,
   },
-
   // ===== Face picker =====
-  pickerBlock: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#2c2c2e',
+  faceStripContainer: {
+    gap: 6,
   },
-  pickerHeader: {
+  faceStripHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    minHeight: 20,
   },
-  pickerTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  pickerEmpty: {
+  faceStripTitle: {
     fontSize: 11,
-    color: '#636366',
-    marginTop: 4,
-    lineHeight: 15,
+    fontWeight: '700',
+    color: '#a1a1aa',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  faceStripCount: {
+    fontSize: 11,
+    color: '#71717a',
+    fontWeight: '500',
   },
   faceStrip: {
     flexDirection: 'row',
     gap: 8,
-    paddingTop: 10,
-    paddingBottom: 2,
-    paddingRight: 4,
+    paddingVertical: 2,
   },
   faceOption: {
     alignItems: 'center',
     padding: 3,
-    borderRadius: 12,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: 'transparent',
-    width: 72,
+    width: 68,
   },
   faceOptionSelected: {
     borderColor: '#0a84ff',
@@ -1922,16 +2399,17 @@ const styles = StyleSheet.create({
   },
   faceOptionLabel: {
     fontSize: 10,
-    color: '#8e8e93',
+    color: '#a1a1aa',
     marginTop: 3,
     fontVariant: ['tabular-nums'],
+    fontWeight: '500',
   },
   faceThumb: {
-    width: 62,
-    height: 62,
+    width: 58,
+    height: 58,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#2c2c2e',
+    backgroundColor: '#27272a',
   },
   faceThumbImage: {
     position: 'absolute',
@@ -1939,45 +2417,119 @@ const styles = StyleSheet.create({
   faceThumbAuto: {
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3f3f46',
   },
   faceThumbAutoMark: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#8e8e93',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#a1a1aa',
+    letterSpacing: 0.5,
   },
-
-  // ===== Collapsed raw paths =====
-  pathsToggle: {
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  pathsToggleText: {
-    fontSize: 11,
-    color: '#636366',
-    fontWeight: '500',
-  },
-
   // ===== Single-screen swap layout =====
   // No ScrollView: the stage takes the slack (`flex: 1`) and the controls under it are
   // their own natural height, so the whole job fits one screen at any device height.
   swapScreen: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: 8,
     gap: 8,
   },
   stage: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#0e0e10',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#2c2c2e',
+    backgroundColor: '#121214',
+    borderWidth: 1,
+    borderColor: '#27272a',
     justifyContent: 'center',
   },
   stageFill: {
     width: '100%',
     height: '100%',
+  },
+  stageLiveBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3f3f46',
+  },
+  livePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#22c55e',
+  },
+  stageLiveBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.6,
+  },
+  stageResultCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 12,
+  },
+  stageResultBadge: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  stageResultBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#22c55e',
+    letterSpacing: 0.8,
+  },
+  stageMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27272a',
+    gap: 16,
+  },
+  stageMetricBox: {
+    alignItems: 'center',
+    minWidth: 50,
+  },
+  stageMetricVal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontVariant: ['tabular-nums'],
+  },
+  stageMetricLbl: {
+    fontSize: 10,
+    color: '#71717a',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  stageMetricDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 24,
+    backgroundColor: '#27272a',
+  },
+  stagePathText: {
+    fontSize: 11,
+    color: '#71717a',
+    fontVariant: ['tabular-nums'],
   },
   stageEmpty: {
     flex: 1,
@@ -1986,45 +2538,93 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 24,
   },
-  stageMark: {
-    fontSize: 34,
-    color: '#48484a',
-    fontWeight: '200',
+  viewfinder: {
+    width: 64,
+    height: 64,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  stageDoneMark: {
-    fontSize: 34,
-    color: '#34c759',
+  cornerBracket: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderColor: '#3f3f46',
   },
-  stageDoneText: {
+  cornerTL: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+    borderTopLeftRadius: 4,
+  },
+  cornerTR: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderTopRightRadius: 4,
+  },
+  cornerBL: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+    borderBottomLeftRadius: 4,
+  },
+  cornerBR: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
+    borderBottomRightRadius: 4,
+  },
+  viewfinderCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewfinderIconCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#27272a',
+  },
+  stageTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: '#ffffff',
-    fontVariant: ['tabular-nums'],
   },
   stageHint: {
     fontSize: 12,
-    color: '#8e8e93',
+    color: '#71717a',
     textAlign: 'center',
   },
   // Overlaid rather than stacked, so showing a result costs the stage no height.
   stageBar: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: 10,
+    right: 10,
+    bottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(18, 18, 20, 0.85)',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3f3f46',
   },
   stageSave: {
-    backgroundColor: '#2c2c2e',
-    paddingHorizontal: 12,
+    backgroundColor: '#0a84ff',
+    paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 8,
+  },
+  stageSaveDone: {
+    backgroundColor: '#22c55e',
   },
   stageSaveText: {
     fontSize: 12,
@@ -2032,7 +2632,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   stageCancel: {
-    backgroundColor: '#3a1c1c',
+    backgroundColor: '#2e1212',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 8,
@@ -2044,51 +2646,122 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 2,
+    gap: 6,
   },
-  footerLink: {
-    fontSize: 12,
+  footerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#18181b',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27272a',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    gap: 4,
+    minHeight: 34,
+  },
+  footerButtonDisabled: {
+    opacity: 0.4,
+  },
+  footerButtonActive: {
+    borderColor: '#0a84ff',
+    backgroundColor: 'rgba(10, 132, 255, 0.1)',
+  },
+  footerButtonSpinner: {
+    marginRight: 2,
+  },
+  footerButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#a1a1aa',
+  },
+  footerButtonTextDisabled: {
+    color: '#71717a',
+  },
+  footerButtonTextActive: {
     color: '#0a84ff',
-    fontWeight: '500',
   },
-  footerLinkDisabled: {
-    color: '#48484a',
+  activeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#0a84ff',
   },
-
   // ===== Sheet =====
   sheetBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   sheetDismissArea: {
     flex: 1,
   },
   sheet: {
-    backgroundColor: '#1c1c1e',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    maxHeight: '75%',
+    backgroundColor: '#18181b',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 18,
+    paddingBottom: 28,
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3f3f46',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
+  },
+  sheetHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
   sheetTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: '#ffffff',
+    letterSpacing: -0.3,
+  },
+  sheetDoneButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   sheetDone: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#0a84ff',
   },
-  sheetBody: {
+  resetTouch: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  resetText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#f59e0b',
+  },
+  sheetSectionHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#71717a',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 14,
     marginBottom: 4,
+  },
+  sheetBody: {
+    marginBottom: 8,
   },
 });
