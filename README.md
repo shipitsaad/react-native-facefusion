@@ -13,7 +13,7 @@ photo or video never leaves the device.
      package.json) so installing the package does not pull 2.4 MB of demo GIF. -->
 <p align="center">
   <img
-    src="https://raw.githubusercontent.com/shipitsaad/facefusion-rn/main/assets/demo.gif"
+    src="https://raw.githubusercontent.com/shipitsaad/react-native-facefusion/main/assets/demo.gif"
     width="300"
     alt="Recorded on a Snapdragon 8 Elite: the device probe reporting tier v79 and a verified NPU, then a photo swap running on it — live preview, result, and save."
   />

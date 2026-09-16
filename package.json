@@ -53,14 +53,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shipitsaad/facefusion-rn.git"
+    "url": "git+https://github.com/shipitsaad/react-native-facefusion.git"
   },
   "author": "Saad <saad.saad737@gmail.com> (https://github.com/shipitsaad)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/shipitsaad/facefusion-rn/issues"
+    "url": "https://github.com/shipitsaad/react-native-facefusion/issues"
   },
-  "homepage": "https://github.com/shipitsaad/facefusion-rn#readme",
+  "homepage": "https://github.com/shipitsaad/react-native-facefusion#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },
