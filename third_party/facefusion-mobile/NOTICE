@@ -76,9 +76,13 @@ any medium without expressly and intelligibly disclaiming that it is
 machine-generated."
 
 **This is why `ContentGate.kt` exists on the public API path (CLAUDE.md rule 5)** --
-it is this project's attempt at the NSFW slice of that list. It has not been checked
-against the rest. Impersonation-for-deception and the machine-generated-content
-disclosure both bear directly on a face-swap tool, and neither is currently enforced
-or disclosed anywhere in this repository, the README, or the example app's output.
-That gap should close before this project calls itself compliant with the licence it
-is two hops downstream of.
+it is this project's attempt at the NSFW slice of that list. Two more are handled as
+of `UsagePolicyGate.kt` and `Watermark.kt`: no swap runs (`PhotoSwap`/`VideoSwap`, same
+unskippable public API path as `ContentGate`) until `acknowledgeUsagePolicy()` has been
+called once, and every output frame carries a burned-in "AI-GENERATED" mark rather than
+metadata alone, since metadata is stripped by almost every real sharing path. Neither
+is a compliance review, and none of this has been checked by counsel -- a persisted
+boolean cannot prove informed consent, and the rest of Attachment A (minors, PII harm,
+defamation, discrimination, automated decisions) still has no engineering equivalent
+here at all. If you're building on this for anything beyond trying it out, read the
+OpenRAIL-AS terms yourself.

@@ -242,12 +242,33 @@ export interface Spec extends TurboModule {
   cancelModelDownload(): void;
   readonly onModelDownloadProgress: CodegenTypes.EventEmitter<ModelDownloadProgress>;
   /**
+   * Whether {@link acknowledgeUsagePolicy} has already been called on this device.
+   * Persists across app restarts; an uninstall/reinstall clears it.
+   */
+  isUsagePolicyAcknowledged(): Promise<boolean>;
+  /**
+   * Records that this app's user has been shown, and agreed to, the text exported as
+   * `USAGE_POLICY_TEXT` from `react-native-facefusion` (or your own text saying the same
+   * thing). Call this once before the first `swapPhoto`/`swapVideo` — both reject
+   * `E_POLICY` until it has been called.
+   *
+   * This exists because of what this library sits downstream of: FaceFusion, licensed
+   * OpenRAIL-AS, which prohibits using it to impersonate people and requires disclosing
+   * machine-generated output — see `third_party/facefusion-mobile/NOTICE` in the source
+   * repository. A boolean flag cannot prove informed consent; what it does is make it
+   * impossible to ship a working swap feature without deliberately calling this first.
+   */
+  acknowledgeUsagePolicy(): Promise<void>;
+  /**
    * Swaps the face from `sourcePath` into every face found in `targetPath`, writing the
-   * result to `outputPath`. Paths in, path out — no pixels cross the bridge.
+   * result to `outputPath`. Paths in, path out — no pixels cross the bridge. The output
+   * has a small "AI-GENERATED" mark burned into one corner — see {@link acknowledgeUsagePolicy}
+   * for why.
    *
    * Rejects with `E_BUSY` if a swap or video job is already running, `E_MODELS` if the
-   * required models are not on disk yet, `E_CONTENT` if the target was refused by the
-   * content gate, and `E_SWAP` otherwise.
+   * required models are not on disk yet, `E_POLICY` if {@link acknowledgeUsagePolicy} has
+   * not been called yet, `E_CONTENT` if the target was refused by the content gate, and
+   * `E_SWAP` otherwise.
    */
   swapPhoto(
     sourcePath: string,
@@ -258,12 +279,14 @@ export interface Spec extends TurboModule {
   /**
    * Swaps the face from `sourcePath` into every frame of the video at `targetPath`,
    * writing the result to `outputPath`. Runs behind a foreground service (Android requires
-   * one for a job this long) and reports progress via {@link onVideoSwapProgress}.
+   * one for a job this long) and reports progress via {@link onVideoSwapProgress}. Every
+   * output frame has the same "AI-GENERATED" mark `swapPhoto` burns in — see
+   * {@link acknowledgeUsagePolicy}.
    *
    * Rejects with `E_BUSY` if a swap or another video job is already running, `E_MODELS` if
-   * the required models are not on disk yet, `E_CANCELLED` if {@link cancelVideoSwap} was
-   * called, `E_CONTENT` if the target was refused by the content gate, and `E_SWAP`
-   * otherwise.
+   * the required models are not on disk yet, `E_POLICY` if {@link acknowledgeUsagePolicy}
+   * has not been called yet, `E_CANCELLED` if {@link cancelVideoSwap} was called,
+   * `E_CONTENT` if the target was refused by the content gate, and `E_SWAP` otherwise.
    */
   swapVideo(
     sourcePath: string,

@@ -100,6 +100,15 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun acknowledgeUsagePolicy(promise: Promise) {
+    UsagePolicyGate.acknowledge(reactApplicationContext)
+    promise.resolve(null)
+  }
+
+  override fun isUsagePolicyAcknowledged(promise: Promise) {
+    promise.resolve(UsagePolicyGate.isAcknowledged(reactApplicationContext))
+  }
+
   override fun swapPhoto(
     sourcePath: String,
     targetPath: String,
@@ -118,6 +127,8 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
         promise.reject("E_BUSY", e.message, e)
       } catch (e: PhotoSwap.ModelsMissing) {
         promise.reject("E_MODELS", e.message, e)
+      } catch (e: UsagePolicyGate.NotAcknowledged) {
+        promise.reject("E_POLICY", e.message, e)
       } catch (e: ContentGate.Refused) {
         promise.reject("E_CONTENT", e.message, e)
       } catch (e: Throwable) {
@@ -196,6 +207,8 @@ class FacefusionModule(reactContext: ReactApplicationContext) :
         promise.reject("E_MODELS", e.message, e)
       } catch (e: VideoSwap.Cancelled) {
         promise.reject("E_CANCELLED", e.message ?: "Cancelled", e)
+      } catch (e: UsagePolicyGate.NotAcknowledged) {
+        promise.reject("E_POLICY", e.message, e)
       } catch (e: ContentGate.Refused) {
         promise.reject("E_CONTENT", e.message, e)
       } catch (e: Throwable) {

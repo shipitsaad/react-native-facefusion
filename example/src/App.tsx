@@ -23,6 +23,9 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   probeDevice,
+  acknowledgeUsagePolicy,
+  isUsagePolicyAcknowledged,
+  USAGE_POLICY_TEXT,
   getModelStatus,
   downloadModels,
   cancelModelDownload,
@@ -144,6 +147,31 @@ function AppScreen() {
   const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
   const [busy, setBusy] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
+
+  // Usage-policy acknowledgement -- swapPhoto()/swapVideo() both reject `E_POLICY` until
+  // acknowledgeUsagePolicy() has been called once on this device (UsagePolicyGate.kt).
+  // This screen's version of that call is the modal below; a real app can put its own
+  // words in front of USAGE_POLICY_TEXT's meaning as long as it calls the same function.
+  // `null` means "still asking the native side", not "not agreed" -- flashing the gate for
+  // one frame on every launch before that answer arrives would be its own small lie.
+  const [policyAcknowledged, setPolicyAcknowledged] = useState<boolean | null>(
+    null
+  );
+  const [acknowledging, setAcknowledging] = useState(false);
+
+  useEffect(() => {
+    isUsagePolicyAcknowledged()
+      .then(setPolicyAcknowledged)
+      .catch(() => setPolicyAcknowledged(false));
+  }, []);
+
+  const acceptPolicy = useCallback(() => {
+    setAcknowledging(true);
+    acknowledgeUsagePolicy()
+      .then(() => setPolicyAcknowledged(true))
+      .catch(() => setPolicyAcknowledged(false))
+      .finally(() => setAcknowledging(false));
+  }, []);
 
   // Swap state
   const [sourcePath, setSourcePath] = useState(DEFAULT_SOURCE);
@@ -568,7 +596,9 @@ function AppScreen() {
   // Why "Run Swap" is unavailable, in the user's words. A dimmed button with no
   // explanation is the worst state a first-time user can land in -- they cannot tell
   // a missing 317 MB download apart from an unpicked file. `null` means good to go.
-  const blocker = !isReady
+  const blocker = policyAcknowledged !== true
+    ? 'Agree to the usage policy first.'
+    : !isReady
     ? 'Download the models first. See Device & Models tab.'
     : sourcePath.trim() === ''
       ? 'Select a source face in step 1.'
@@ -581,6 +611,36 @@ function AppScreen() {
     // gesture-nav bar the footer row would otherwise sit underneath.
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#09090b" />
+
+      {/* Usage-policy gate. No backdrop dismiss, no back-button dismiss (onRequestClose
+          is a no-op) -- unlike Sheet, agreeing is not optional, it is what unblocks
+          Run Swap in the first place. See the state above for why this is `=== false`
+          and not `!policyAcknowledged`. */}
+      <Modal
+        visible={policyAcknowledged === false}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.policyBackdrop}>
+          <View style={styles.policyCard}>
+            <Text style={styles.policyTitle}>Before your first swap</Text>
+            <Text style={styles.policyBody}>{USAGE_POLICY_TEXT}</Text>
+            <TouchableOpacity
+              style={styles.policyButton}
+              onPress={acceptPolicy}
+              disabled={acknowledging}
+              activeOpacity={0.8}
+            >
+              {acknowledging ? (
+                <ActivityIndicator color="#09090b" />
+              ) : (
+                <Text style={styles.policyButtonText}>I Agree — Continue</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Top Header Bar */}
       <View style={styles.topBar}>
@@ -2690,6 +2750,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a84ff',
   },
   // ===== Sheet =====
+  policyBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    padding: 24,
+  },
+  policyCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#18181b',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#27272a',
+    padding: 22,
+  },
+  policyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: -0.3,
+    marginBottom: 10,
+  },
+  policyBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#a1a1aa',
+    marginBottom: 18,
+  },
+  policyButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  policyButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#000000',
+    letterSpacing: -0.2,
+  },
   sheetBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',

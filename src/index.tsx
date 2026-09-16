@@ -1,4 +1,7 @@
 export { probeDevice } from './probeDevice';
+export { acknowledgeUsagePolicy } from './acknowledgeUsagePolicy';
+export { isUsagePolicyAcknowledged } from './isUsagePolicyAcknowledged';
+export { USAGE_POLICY_TEXT } from './usagePolicyText';
 export {
   getModelStatus,
   downloadModels,

@@ -173,6 +173,9 @@ import {
   getModelStatus,
   downloadModels,
   onModelDownloadProgress,
+  acknowledgeUsagePolicy,
+  isUsagePolicyAcknowledged,
+  USAGE_POLICY_TEXT,
   swapPhoto,
   swapVideo,
   detectSourceFaces,
@@ -190,6 +193,15 @@ if (!status.ready) {
   const sub = onModelDownloadProgress((p) => console.log(p.fileIndex, p.fileCount));
   await downloadModels();
   sub.remove();
+}
+
+// Required once, before the first swap: show the user USAGE_POLICY_TEXT (or your own
+// words for it), get their agreement, then call this. swapPhoto/swapVideo both reject
+// `E_POLICY` until it has. See "Why the extra steps" -> Licence below for why this
+// exists -- it isn't decoration.
+if (!(await isUsagePolicyAcknowledged())) {
+  // show USAGE_POLICY_TEXT, wait for the user to agree, then:
+  await acknowledgeUsagePolicy();
 }
 
 // Swap a face into a photo. Paths in, path out -- no pixels cross the JS bridge.
@@ -328,9 +340,12 @@ Two things it depends on are not in this repository and are not MIT:
   machine-generated content -- and requires passing those restrictions to anyone this
   is redistributed to. See [`third_party/facefusion-mobile/NOTICE`](third_party/facefusion-mobile/NOTICE).
 
-This project's content gate is its own attempt at part of that list; it has not been
-checked against the rest. If you're building on this for anything beyond trying it
-out, read the OpenRAIL-AS terms yourself -- nothing here is legal advice.
+This project's content gate is its own attempt at the NSFW part of that list.
+`acknowledgeUsagePolicy()` (see Usage above) and the "AI-GENERATED" mark burned into
+every swap's output are this project's attempt at two more: no impersonation for
+deception, and disclosing machine-generated content. None of this has been reviewed by
+counsel. If you're building on this for anything beyond trying it out, read the
+OpenRAIL-AS terms yourself -- nothing here is legal advice.
 
 ---
 

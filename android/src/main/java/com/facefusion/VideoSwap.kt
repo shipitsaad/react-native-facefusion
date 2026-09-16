@@ -113,6 +113,7 @@ object VideoSwap {
     targetFps: Int? = null,
     onProgress: (VideoSwapProgress) -> Unit,
   ): VideoSwapResult {
+    UsagePolicyGate.check(context)
     cancelled = false
 
     NativePipe.loadError?.let {
@@ -227,6 +228,10 @@ object VideoSwap {
     // upstream's own video sampling rate for the content gate (docs/02-upstream.md).
     val contentSampler = ContentGate.VideoSampler()
     var lastSampledSecond = -1
+    // Built once for this call, not per frame -- see [Watermark]. Sized against the
+    // encoder's declared width/height, the shape every frame is back in by the time it
+    // reaches feedEncoderFrame below, after rotation-restore.
+    val watermark = Watermark.forFrameSize(width, height)
 
     try {
       var encoderDone = false
@@ -313,6 +318,10 @@ object VideoSwap {
             bgr = NativePipe.rotateBgr(bgr, fw, fh, (360 - rotation) % 360)
               ?: throw IllegalStateException(NativePipe.lastError())
           }
+          // Disclosure, not decoration -- see [Watermark]. After rotation-restore, so the
+          // mark lands upright in the encoder's own frame, and before the preview/encoder
+          // both see it, so neither can end up without it.
+          watermark.stamp(bgr, width, height)
           // Same orientation the encoder is about to receive, so the preview matches the
           // output file rather than the decoder's raw (possibly sideways) frame.
           PreviewSurfaceHolder.draw(bgr, width, height)

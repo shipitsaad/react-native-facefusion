@@ -46,6 +46,8 @@ object PhotoSwap {
      *  option existed. See [FaceCrop]. */
     targetFaceBox: FloatArray? = null,
   ): PhotoSwapResult {
+    UsagePolicyGate.check(context)
+
     NativePipe.loadError?.let {
       throw IllegalStateException("libffnative.so did not load: $it")
     }
@@ -90,6 +92,11 @@ object PhotoSwap {
         NativePipe.processFrame(targetBgr, target.width, target.height)
       }
       if (faceCount < 0) throw IllegalStateException(NativePipe.lastError())
+
+      // Disclosure, not decoration -- see [Watermark]. After the swap, before anything
+      // downstream (preview, encode) sees the frame, so nothing that shows or saves this
+      // output can end up without the mark.
+      Watermark.forFrameSize(target.width, target.height).stamp(targetBgr, target.width, target.height)
 
       // One frame, not a loop -- shows the result on any mounted <FacefusionPreview />
       // immediately, before the encode-to-file below even starts.
