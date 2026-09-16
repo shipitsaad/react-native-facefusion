@@ -15,10 +15,15 @@ set(FF_UPSTREAM "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/facefusion-
 #
 # These two messages point at README.md's "Install" section, NOT at docs/ -- docs/ is
 # the local engineering record and ships in zero files of the npm package, so a
-# consumer told to read docs/03-setup.md is told to read a file they do not have. This
-# is the likeliest error any new installer hits (a plain `npm install` leaves both
-# pieces absent, and a later `npm install` wipes them again), so it has to be
-# actionable from inside node_modules with nothing else to hand.
+# consumer told to read docs/03-setup.md is told to read a file they do not have. So
+# both have to be actionable from inside node_modules with nothing else to hand.
+#
+# Which of the two fires has changed. `postinstall` fetches the upstream C++ now, so a
+# plain `npm install` normally clears the first guard and stops at the second -- the
+# QAIRT SDK is proprietary and nothing can fetch it for you. The first guard is still
+# reachable, and deliberately so: the fetch needs network and git at install time, and
+# when it cannot run `postinstall` warns rather than failing the install, which leaves
+# the engine absent and lands the reader here. Both are tested in CI.
 if(NOT EXISTS "${FF_UPSTREAM}/ffjni.cpp")
   message(FATAL_ERROR
     "Upstream C++ engine is missing from third_party/facefusion-mobile/cpp/.\n"

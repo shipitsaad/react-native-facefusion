@@ -249,19 +249,41 @@ jobs:
           TSX
           npx tsc --noEmit
 
-      # Before fetching: the first CMake guard must fire with a message that names the
-      # script to run. This is the likeliest error any new installer sees, so its text
-      # is part of the product. It must not point at docs/, which does not ship.
+      # The first CMake guard must fire with a message that names the script to run.
+      # This is the likeliest error any new installer sees, so its text is part of the
+      # product. It must not point at docs/, which does not ship.
+      #
+      # This step used to build straight after `npm install` and get the guard for free,
+      # because fetching the upstream C++ was a manual step. `postinstall` now does that
+      # fetch automatically, so a clean install arrives with the engine already present
+      # and this guard can no longer fire on its own -- the run that added `postinstall`
+      # is exactly where CI went red, failing here with the *QNN* guard's text instead.
+      #
+      # The scenario is still real and still worth testing: the fetch needs network and
+      # git at install time, and when it cannot run, `postinstall` deliberately warns
+      # rather than failing the install -- which leaves precisely this tree. So stage it
+      # rather than assume it. Move the engine aside, prove the guard fires, put it back
+      # from a trap so the later steps still have it even if this one dies early.
       - name: CMake refuses clearly when the upstream C++ is absent
         run: |
           set -euo pipefail
+          PKG=/tmp/ConsumerApp/node_modules/react-native-facefusion
+          UP="$PKG/third_party/facefusion-mobile/cpp"
+          test -f "$UP/ffjni.cpp" \
+            || { echo "::error::postinstall did not fetch the upstream C++. That is its own bug, not this guard's."; exit 1; }
+          trap 'mv /tmp/upstream-cpp "$UP" 2>/dev/null || true' EXIT
+          mv "$UP" /tmp/upstream-cpp
           cd /tmp/ConsumerApp/android
           if ./gradlew :react-native-facefusion:assembleDebug --no-daemon > /tmp/g1.log 2>&1; then
             echo "::error::Expected the build to FAIL with no upstream C++ present, but it succeeded."
             exit 1
           fi
+          # Show the CMake error itself on failure, not Gradle's stack trace. `tail` alone
+          # caught only the Java frames and hid which guard actually fired, which is what
+          # made this failure take a repro to diagnose rather than a glance at the log.
           grep -q "Upstream C++ engine is missing" /tmp/g1.log \
-            || { echo "::error::Build failed, but not with the upstream-missing guard:"; tail -40 /tmp/g1.log; exit 1; }
+            || { echo "::error::Build failed, but not with the upstream-missing guard:"; \
+                 grep -A12 "CMake Error" /tmp/g1.log || tail -60 /tmp/g1.log; exit 1; }
           grep -q "fetch-upstream.sh" /tmp/g1.log \
             || { echo "::error::The guard does not name the script to run."; exit 1; }
           ! grep -qE "docs/[0-9]" /tmp/g1.log \
