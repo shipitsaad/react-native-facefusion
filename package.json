@@ -1,6 +1,6 @@
 {
   "name": "react-native-facefusion",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "React Native TurboModule for on-device face swapping on Qualcomm Hexagon NPUs. Runs fully offline on the phone, no server and no uploads.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
