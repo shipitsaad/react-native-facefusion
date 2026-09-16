@@ -8,6 +8,25 @@ A React Native TurboModule that runs face swapping **entirely on the phone**, on
 Qualcomm's Hexagon NPU. No server, no upload, no network call for inference — the
 photo or video never leaves the device.
 
+<!-- Absolute raw URL, not a relative path: this same README is what npmjs.com renders,
+     and the file itself is deliberately kept out of the npm tarball (see `files` in
+     package.json) so installing the package does not pull 2.4 MB of demo GIF. -->
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/shipitsaad/facefusion-rn/main/assets/demo.gif"
+    width="300"
+    alt="Recorded on a Snapdragon 8 Elite: the device probe reporting tier v79 and a verified NPU, then a photo swap running on it — live preview, result, and save."
+  />
+</p>
+
+<p align="center">
+  <sub>
+    Recorded on a Samsung SM-S931B (Snapdragon 8 Elite, tier v79), 2026-09-16 — the
+    device probe first, so you can see it is the Hexagon NPU answering, then a real
+    swap end to end. The two faces are synthetic (StyleGAN2); no real person appears.
+  </sub>
+</p>
+
 ```ts
 import { swapPhoto } from 'react-native-facefusion';
 
