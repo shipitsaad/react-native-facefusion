@@ -3,6 +3,7 @@ package facefusion.example
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -64,7 +65,15 @@ class MediaPickerModule(reactContext: ReactApplicationContext) :
     reactContext.addActivityEventListener(activityEventListener)
   }
 
-  /** `kind` is `"image"` or `"video"`. Resolves with the copied file's absolute path. */
+  /**
+   * `kind` is `"image"`, `"video"`, or `"media"` for either.
+   *
+   * `"media"` is what the app actually uses now: the target of a swap can be a photo or a
+   * clip, and making the user declare which one BEFORE the picker opens is a choice they
+   * should never have had to make -- they know what they want to swap, not which of two
+   * buttons the app wants them to press first. With either allowed, the extension can no
+   * longer be assumed up front and comes from what was really picked instead.
+   */
   @ReactMethod
   fun pickMedia(kind: String, promise: Promise) {
     val activity = reactApplicationContext.currentActivity
@@ -77,7 +86,17 @@ class MediaPickerModule(reactContext: ReactApplicationContext) :
 
     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
       addCategory(Intent.CATEGORY_OPENABLE)
-      type = if (kind == "video") "video/*" else "image/*"
+      when (kind) {
+        "video" -> type = "video/*"
+        "image" -> type = "image/*"
+        else -> {
+          // ACTION_OPEN_DOCUMENT takes ONE `type`; two are expressed as `*/*` narrowed by
+          // EXTRA_MIME_TYPES, which the picker uses to filter. Without the extra, `*/*`
+          // would offer PDFs and zips for a face swap.
+          type = "*/*"
+          putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+        }
+      }
     }
     activity.startActivityForResult(intent, REQUEST_CODE)
   }
@@ -85,11 +104,25 @@ class MediaPickerModule(reactContext: ReactApplicationContext) :
   private fun copyToAppStorage(uri: Uri): String {
     val dir = reactApplicationContext.getExternalFilesDir(null)
       ?: reactApplicationContext.filesDir
-    val dest = File(dir, "picked_${System.currentTimeMillis()}.$pendingExtension")
+    val dest = File(dir, "picked_${System.currentTimeMillis()}.${extensionFor(uri)}")
     val input = reactApplicationContext.contentResolver.openInputStream(uri)
       ?: throw IllegalStateException("Could not open the picked file")
     input.use { stream -> FileOutputStream(dest).use { out -> stream.copyTo(out) } }
     return dest.absolutePath
+  }
+
+  /**
+   * The copied file's extension, from the Uri's real MIME type rather than from what the
+   * caller asked for. This is load-bearing, not tidiness: JS decides photo-vs-video by
+   * looking at the extension, so a clip copied out as `.jpg` would be sent to the photo
+   * swap and fail to decode.
+   */
+  private fun extensionFor(uri: Uri): String {
+    val mime = reactApplicationContext.contentResolver.getType(uri)
+      ?: return pendingExtension
+    val fromMap = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+    if (fromMap != null) return fromMap
+    return if (mime.startsWith("video/")) "mp4" else "jpg"
   }
 
   companion object {
